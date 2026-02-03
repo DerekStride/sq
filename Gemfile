@@ -1,3 +1,5 @@
-source 'https://rubygems.org'
+# frozen_string_literal: true
 
-gem 'cli-ui'  # Shopify's CLI UI (same as Roast)
+source "https://rubygems.org"
+
+gemspec

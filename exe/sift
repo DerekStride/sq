@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "sift"
+require "optparse"
+
+options = {
+  path: Dir.pwd,
+  base: "HEAD",
+  model: "sonnet"
+}
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: sift [options]"
+
+  opts.on("-p", "--path PATH", "Repository path (default: current dir)") do |p|
+    options[:path] = p
+  end
+
+  opts.on("-b", "--base REF", "Base ref for diff (default: HEAD)") do |b|
+    options[:base] = b
+  end
+
+  opts.on("-m", "--model MODEL", "Claude model (default: sonnet)") do |m|
+    options[:model] = m
+  end
+
+  opts.on("-v", "--version", "Show version") do
+    puts "sift #{Sift::VERSION}"
+    exit
+  end
+
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+Sift::ReviewLoop.new(**options).run

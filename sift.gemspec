@@ -1,0 +1,30 @@
+# frozen_string_literal: true
+
+require_relative "lib/sift/version"
+
+Gem::Specification.new do |spec|
+  spec.name = "sift"
+  spec.version = Sift::VERSION
+  spec.authors = ["Derek Sivers"]
+  spec.email = ["derek@sivers.org"]
+
+  spec.summary = "Human-in-the-loop code review with Claude"
+  spec.description = "Interactive TUI for reviewing code changes with AI-powered analysis and session continuity"
+  spec.homepage = "https://github.com/sivers/sift"
+  spec.license = "MIT"
+  spec.required_ruby_version = ">= 3.1.0"
+
+  spec.files = Dir.glob(%w[
+    lib/**/*.rb
+    exe/*
+    LICENSE.txt
+    README.md
+  ])
+  spec.bindir = "exe"
+  spec.executables = ["sift"]
+  spec.require_paths = ["lib"]
+
+  spec.add_dependency "cli-ui", "~> 2.0"
+
+  spec.metadata["rubygems_mfa_required"] = "true"
+end
