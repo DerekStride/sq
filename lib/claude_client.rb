@@ -1,0 +1,68 @@
+# frozen_string_literal: true
+
+require "json"
+require "open3"
+
+# Client for calling Claude CLI and managing sessions
+class ClaudeClient
+  class Error < StandardError; end
+
+  Result = Struct.new(:response, :session_id, :raw, keyword_init: true)
+
+  def initialize(model: nil)
+    @model = model
+  end
+
+  # Send a prompt to Claude, optionally resuming a session
+  # Returns Result with response text and session_id
+  def prompt(text, session_id: nil)
+    args = build_args(session_id:)
+    stdout, stderr, status = Open3.capture3(*args, stdin_data: text)
+
+    unless status.success?
+      raise Error, "Claude CLI failed: #{stderr}"
+    end
+
+    parse_response(stdout)
+  end
+
+  # Analyze a diff hunk with Claude
+  def analyze_diff(hunk, file:, context: nil, session_id: nil)
+    prompt_text = build_diff_prompt(hunk, file:, context:)
+    prompt(prompt_text, session_id:)
+  end
+
+  private
+
+  def build_args(session_id: nil)
+    args = ["claude", "-p", "--output-format", "json"]
+    args += ["--model", @model] if @model
+    args += ["--resume", session_id] if session_id
+    args
+  end
+
+  def build_diff_prompt(hunk, file:, context: nil)
+    parts = []
+    parts << "File: #{file}"
+    parts << "Context: #{context}" if context
+    parts << ""
+    parts << "Diff:"
+    parts << "```diff"
+    parts << hunk
+    parts << "```"
+    parts << ""
+    parts << "Review this change. Be concise (1-2 sentences). Focus on potential issues, improvements, or confirm it looks good."
+    parts.join("\n")
+  end
+
+  def parse_response(stdout)
+    data = JSON.parse(stdout)
+    Result.new(
+      response: data["result"],
+      session_id: data["session_id"],
+      raw: data
+    )
+  rescue JSON::ParserError => e
+    raise Error, "Failed to parse Claude response: #{e.message}"
+  end
+end
