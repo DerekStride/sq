@@ -50,7 +50,7 @@ class Sift::CLI::QueueCommandTest < Minitest::Test
     exit_code = run_command([])
 
     assert_equal 0, exit_code
-    assert_match(/Usage:.*sift queue/i, stdout_output)
+    assert_match(/Usage:.*sq/i, stdout_output)
     assert_match(/add/i, stdout_output)
     assert_match(/list/i, stdout_output)
   end

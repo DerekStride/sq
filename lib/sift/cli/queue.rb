@@ -44,7 +44,7 @@ module Sift
 
       def help_text
         <<~HELP
-          Usage: sift queue <subcommand> [options]
+          Usage: sq <subcommand> [options]
 
           Subcommands:
             add     Add a new item to the queue
@@ -53,7 +53,7 @@ module Sift
             show    Show details of a queue item
             rm      Remove an item from the queue
 
-          Run 'sift queue <subcommand> --help' for subcommand options.
+          Run 'sq <subcommand> --help' for subcommand options.
         HELP
       end
 
@@ -62,7 +62,7 @@ module Sift
         options = { sources: [], metadata: {} }
 
         parser = OptionParser.new do |opts|
-          opts.banner = "Usage: sift queue add [options]"
+          opts.banner = "Usage: sq add [options]"
 
           opts.on("--diff PATH", "Add diff source (repeatable)") do |path|
             options[:sources] << { type: "diff", path: path }
@@ -130,7 +130,7 @@ module Sift
         options = { add_sources: [], rm_sources: [] }
 
         parser = OptionParser.new do |opts|
-          opts.banner = "Usage: sift queue edit <id> [options]"
+          opts.banner = "Usage: sq edit <id> [options]"
 
           opts.on("--add-diff PATH", "Add diff source") do |path|
             options[:add_sources] << { type: "diff", path: path }
@@ -237,7 +237,7 @@ module Sift
         options = { json: false }
 
         parser = OptionParser.new do |opts|
-          opts.banner = "Usage: sift queue list [options]"
+          opts.banner = "Usage: sq list [options]"
 
           opts.on("--status STATUS", Sift::Queue::VALID_STATUSES,
                   "Filter by status (#{Sift::Queue::VALID_STATUSES.join("|")})") do |status|
@@ -284,7 +284,7 @@ module Sift
         options = { json: false }
 
         parser = OptionParser.new do |opts|
-          opts.banner = "Usage: sift queue show <id> [options]"
+          opts.banner = "Usage: sq show <id> [options]"
 
           opts.on("--json", "Output as JSON") do
             options[:json] = true
@@ -328,7 +328,7 @@ module Sift
       # --- Rm subcommand ---
       def run_rm
         parser = OptionParser.new do |opts|
-          opts.banner = "Usage: sift queue rm <id>"
+          opts.banner = "Usage: sq rm <id>"
 
           opts.on("-h", "--help", "Show this help") do
             @stdout.puts opts
