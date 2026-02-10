@@ -40,11 +40,11 @@ module Sift
         when :revise
           # Can only revise if we have analysis
           unless @analyses.key?(@current)
-            puts CLI::UI.fmt("{{yellow:No analysis to revise. Press '?' first.}}")
+            puts ::CLI::UI.fmt("{{yellow:No analysis to revise. Press '?' first.}}")
             redo
           end
-          feedback = CLI::UI::Prompt.ask("Revision feedback:")
-          puts CLI::UI.fmt("{{magenta:↻ Revising...}}")
+          feedback = ::CLI::UI::Prompt.ask("Revision feedback:")
+          puts ::CLI::UI.fmt("{{magenta:↻ Revising...}}")
           revised = revise_analysis(hunk, feedback)
           @analyses[@current] = revised
           display_analysis(revised)
@@ -61,54 +61,56 @@ module Sift
     private
 
     def setup_ui
-      CLI::UI::StdoutRouter.enable
-      CLI::UI.frame_style = :box
+      ::CLI::UI::StdoutRouter.enable
+      ::CLI::UI.frame_style = :box
     end
 
     def load_hunks
-      CLI::UI::Spinner.spin("Loading diff hunks...") do |spinner|
+      ::CLI::UI::Spinner.spin("Loading diff hunks...") do |spinner|
         @hunks = DiffParser.from_git(@path, base: @base)
         spinner.update_title("Found #{@hunks.length} hunks")
       end
 
       if @hunks.empty?
-        puts CLI::UI.fmt("{{yellow:No changes found.}}")
+        puts ::CLI::UI.fmt("{{yellow:No changes found.}}")
       end
     end
 
     def show_header
       puts
-      CLI::UI::Frame.open("{{bold:Sift Review}}", color: :blue) do
-        puts CLI::UI.fmt("{{cyan:Reviewing #{@hunks.length} hunks in}} {{bold:#{@path}}}")
-        puts CLI::UI.fmt("{{gray:Base: #{@base}}}")
+      ::CLI::UI::Frame.open("{{bold:Sift Review}}", color: :blue) do
+        puts ::CLI::UI.fmt("{{cyan:Reviewing #{@hunks.length} hunks in}} {{bold:#{@path}}}")
+        puts ::CLI::UI.fmt("{{gray:Base: #{@base}}}")
       end
     end
 
     def display_hunk(hunk)
+      source = Queue::Source.new(type: "diff", path: hunk.file, content: hunk.content)
+      renderer = Source::Diff.new(source)
+      lines = renderer.render(width: terminal_width)
+
       puts
-      CLI::UI::Frame.open("{{bold:#{hunk.file}}} {{cyan:(#{@current + 1}/#{@hunks.length})}}", color: :yellow) do
-        hunk.content.each_line do |line|
-          formatted = case line[0]
-          when "+" then CLI::UI.fmt("{{green:#{line.chomp}}}")
-          when "-" then CLI::UI.fmt("{{red:#{line.chomp}}}")
-          when "@" then CLI::UI.fmt("{{cyan:#{line.chomp}}}")
-          else line.chomp
-          end
-          puts formatted
-        end
+      ::CLI::UI::Frame.open("{{bold:#{hunk.file}}} {{cyan:(#{@current + 1}/#{@hunks.length})}}", color: :yellow) do
+        lines.each { |line| puts line }
       end
+    end
+
+    def terminal_width
+      IO.console&.winsize&.last || 80
+    rescue
+      80
     end
 
     def display_analysis(analysis)
       puts
-      CLI::UI::Frame.open("{{bold:Analysis}}", color: :magenta) do
+      ::CLI::UI::Frame.open("{{bold:Analysis}}", color: :magenta) do
         puts analysis.response
       end
     end
 
     def analyze_hunk(hunk)
       result = nil
-      CLI::UI::Spinner.spin("Asking Claude...") do |spinner|
+      ::CLI::UI::Spinner.spin("Asking Claude...") do |spinner|
         session_id = @sessions[hunk.file]
         result = @client.analyze_diff(
           hunk.content,
@@ -124,33 +126,33 @@ module Sift
     def prompt_action(has_analysis:)
       puts
       if has_analysis
-        puts CLI::UI.fmt("{{bold:Actions:}} [{{green:a}}]ccept  [{{red:r}}]eject  [{{yellow:c}}]omment  [{{magenta:v}}]revise  [{{blue:?}}]ask again  [{{cyan:q}}]uit")
+        puts ::CLI::UI.fmt("{{bold:Actions:}} [{{green:a}}]ccept  [{{red:r}}]eject  [{{yellow:c}}]omment  [{{magenta:v}}]revise  [{{blue:?}}]ask again  [{{cyan:q}}]uit")
       else
-        puts CLI::UI.fmt("{{bold:Actions:}} [{{green:a}}]ccept  [{{red:r}}]eject  [{{yellow:c}}]omment  [{{blue:?}}]ask Claude  [{{cyan:q}}]uit")
+        puts ::CLI::UI.fmt("{{bold:Actions:}} [{{green:a}}]ccept  [{{red:r}}]eject  [{{yellow:c}}]omment  [{{blue:?}}]ask Claude  [{{cyan:q}}]uit")
       end
-      print CLI::UI.fmt("{{bold:Choice:}} ")
+      print ::CLI::UI.fmt("{{bold:Choice:}} ")
 
       loop do
-        char = CLI::UI::Prompt.read_char
+        char = ::CLI::UI::Prompt.read_char
         case char.downcase
         when "a"
-          puts CLI::UI.fmt("{{green:✓ Accepted}}")
+          puts ::CLI::UI.fmt("{{green:✓ Accepted}}")
           return :accept
         when "r"
-          puts CLI::UI.fmt("{{red:✗ Rejected}}")
+          puts ::CLI::UI.fmt("{{red:✗ Rejected}}")
           return :reject
         when "c"
           puts
-          comment = CLI::UI::Prompt.ask("Enter comment:")
-          puts CLI::UI.fmt("{{yellow:💬 Commented}}")
+          comment = ::CLI::UI::Prompt.ask("Enter comment:")
+          puts ::CLI::UI.fmt("{{yellow:💬 Commented}}")
           return [:comment, comment]
         when "v"
           return :revise
         when "?"
-          puts CLI::UI.fmt("{{blue:🤖 Analyzing...}}")
+          puts ::CLI::UI.fmt("{{blue:🤖 Analyzing...}}")
           return :analyze
         when "q"
-          puts CLI::UI.fmt("{{cyan:Quitting...}}")
+          puts ::CLI::UI.fmt("{{cyan:Quitting...}}")
           return :quit
         end
       end
@@ -175,18 +177,18 @@ module Sift
       case action
       when :accept
         GitActions.stage_hunk(hunk, path: @path)
-        puts CLI::UI.fmt("{{green:Staged hunk}}")
+        puts ::CLI::UI.fmt("{{green:Staged hunk}}")
       when :reject
         GitActions.revert_hunk(hunk, path: @path)
-        puts CLI::UI.fmt("{{red:Reverted hunk}}")
+        puts ::CLI::UI.fmt("{{red:Reverted hunk}}")
       end
     rescue GitActions::Error => e
-      puts CLI::UI.fmt("{{red:Git error: #{e.message}}}")
+      puts ::CLI::UI.fmt("{{red:Git error: #{e.message}}}")
     end
 
     def revise_analysis(hunk, feedback)
       result = nil
-      CLI::UI::Spinner.spin("Re-analyzing with feedback...") do |spinner|
+      ::CLI::UI::Spinner.spin("Re-analyzing with feedback...") do |spinner|
         session_id = @sessions[hunk.file]
         prompt = "User feedback on your analysis: #{feedback}\n\nPlease revise your review."
         result = @client.prompt(prompt, session_id: session_id)
@@ -198,18 +200,18 @@ module Sift
 
     def show_summary
       puts
-      CLI::UI::Frame.open("{{bold:Review Summary}}", color: :green) do
+      ::CLI::UI::Frame.open("{{bold:Review Summary}}", color: :green) do
         if @decisions.empty?
-          puts CLI::UI.fmt("{{yellow:No decisions recorded.}}")
+          puts ::CLI::UI.fmt("{{yellow:No decisions recorded.}}")
         else
           staged = @decisions.count { |d| d[:action] == :accept }
           reverted = @decisions.count { |d| d[:action] == :reject }
           commented = @decisions.count { |d| d[:action] == :comment }
 
-          puts CLI::UI.fmt("{{green:Staged:}} #{staged}")
-          puts CLI::UI.fmt("{{red:Reverted:}} #{reverted}")
-          puts CLI::UI.fmt("{{yellow:Commented:}} #{commented}")
-          puts CLI::UI.fmt("{{cyan:Remaining:}} #{@hunks.length - @current}")
+          puts ::CLI::UI.fmt("{{green:Staged:}} #{staged}")
+          puts ::CLI::UI.fmt("{{red:Reverted:}} #{reverted}")
+          puts ::CLI::UI.fmt("{{yellow:Commented:}} #{commented}")
+          puts ::CLI::UI.fmt("{{cyan:Remaining:}} #{@hunks.length - @current}")
         end
       end
     end
