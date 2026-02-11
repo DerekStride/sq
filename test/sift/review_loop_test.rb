@@ -199,6 +199,54 @@ class Sift::ReviewLoopTest < Minitest::Test
     assert items.all?(&:pending?)
   end
 
+  def test_reload_sources_updates_content_from_disk
+    Dir.mktmpdir("sift_test_") do |dir|
+      file_path = File.join(dir, "test.rb")
+      File.write(file_path, "original")
+
+      item = @queue.push(sources: [{ type: "file", path: file_path, content: "original" }])
+      loop = Sift::ReviewLoop.new(queue: @queue)
+
+      # Modify file on disk
+      File.write(file_path, "modified")
+
+      loop.send(:reload_sources, item)
+
+      assert_equal "modified", item.sources.first.content
+    end
+  end
+
+  def test_reload_sources_warns_when_analysis_stale
+    Dir.mktmpdir("sift_test_") do |dir|
+      file_path = File.join(dir, "test.rb")
+      File.write(file_path, "original")
+
+      item = @queue.push(sources: [{ type: "file", path: file_path, content: "original" }])
+      loop = Sift::ReviewLoop.new(queue: @queue)
+
+      # Simulate existing analysis
+      loop.instance_variable_set(:@current, 0)
+      loop.instance_variable_get(:@analyses)[0] = "some analysis"
+
+      # Modify file on disk
+      File.write(file_path, "modified")
+
+      output = capture_cli_ui_output { loop.send(:reload_sources, item) }
+
+      assert_includes output, "Sources changed on disk"
+      assert_includes output, "Analysis may be stale"
+    end
+  end
+
+  def test_reload_sources_skips_sources_without_path
+    item = @queue.push(sources: [{ type: "text", content: "original text" }])
+    loop = Sift::ReviewLoop.new(queue: @queue)
+
+    loop.send(:reload_sources, item)
+
+    assert_equal "original text", item.sources.first.content
+  end
+
   private
 
   def capture_cli_ui_output

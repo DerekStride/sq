@@ -50,6 +50,9 @@ module Sift
           prev_source
         when :browse_sources
           drill_down_file_browser
+        when :edit
+          open_in_editor(item)
+          reload_sources(item)
         when :analyze
           analysis = analyze_item(item)
           @analyses[@current] = analysis
@@ -119,6 +122,7 @@ module Sift
       parts << "[{{green:a}}]ccept"
       parts << "[{{red:r}}]eject"
       parts << "[{{yellow:c}}]omment"
+      parts << "[{{cyan:e}}]dit"
 
       if has_analysis
         parts << "[{{magenta:v}}]revise"
@@ -153,6 +157,8 @@ module Sift
           comment = ::CLI::UI::Prompt.ask("Enter comment:")
           puts ::CLI::UI.fmt("{{yellow:💬 Commented}}")
           return [:comment, comment]
+        when "e"
+          return :edit
         when "v"
           return :revise if has_analysis
         when "?"
@@ -233,6 +239,28 @@ module Sift
       end
       parts << "Review this item. Be concise (1-2 sentences). Focus on potential issues, improvements, or confirm it looks good."
       parts.join("\n")
+    end
+
+    def open_in_editor(item)
+      editor = Editor.new(sources: item.sources, item_id: item.id)
+      editor.open
+    end
+
+    def reload_sources(item)
+      changed = false
+      item.sources.each do |source|
+        next unless source.path && ::File.exist?(source.path)
+
+        new_content = ::File.read(source.path)
+        if new_content != source.content
+          source.content = new_content
+          changed = true
+        end
+      end
+
+      if changed && @analyses.key?(@current)
+        puts ::CLI::UI.fmt("{{yellow:Sources changed on disk. Analysis may be stale.}}")
+      end
     end
 
     def show_summary
