@@ -142,7 +142,7 @@ class Sift::EditorTest < Minitest::Test
     paths = editor.collect_paths
 
     assert_equal 1, paths.length
-    assert paths[0].end_with?(".txt")
+    assert paths[0].end_with?(".md")
     assert_includes paths[0], "sift-abc"
     assert_equal "some notes", File.read(paths[0])
   end

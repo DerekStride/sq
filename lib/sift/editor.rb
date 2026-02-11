@@ -57,7 +57,7 @@ module Sift
       when "file"
         paths << source.path if source.path && ::File.exist?(source.path)
       when "text"
-        paths << write_temp(source.content || "", @item_id, ".txt")
+        paths << write_temp(source.content || "", @item_id, ".md")
       when "transcript"
         basename = source.path ? ::File.basename(source.path) : @item_id
         paths << write_temp(source.content || "", basename, ".md")
