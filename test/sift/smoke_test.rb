@@ -19,7 +19,8 @@ class SmokeTest < Minitest::Test
   def test_sift_help_flag
     stdout, stderr, status = Open3.capture3("bundle", "exec", EXE_SIFT, "--help")
     assert status.success?, "sift --help failed: #{stderr}"
-    assert_includes stdout, "Usage: sift"
+    assert_includes stdout, "USAGE"
+    assert_includes stdout, "sift"
   end
 
   def test_sift_empty_queue_exits_gracefully

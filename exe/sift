@@ -2,34 +2,5 @@
 # frozen_string_literal: true
 
 require "sift"
-require "optparse"
 
-options = {
-  queue_path: ENV.fetch("SIFT_QUEUE_PATH", Sift::CLI::DEFAULT_QUEUE_PATH),
-  model: "sonnet",
-}
-
-OptionParser.new do |opts|
-  opts.banner = "Usage: sift [options]"
-
-  opts.on("-q", "--queue PATH", "Queue file path (default: #{Sift::CLI::DEFAULT_QUEUE_PATH})") do |q|
-    options[:queue_path] = q
-  end
-
-  opts.on("-m", "--model MODEL", "Claude model (default: sonnet)") do |m|
-    options[:model] = m
-  end
-
-  opts.on("-v", "--version", "Show version") do
-    puts "sift #{Sift::VERSION}"
-    exit
-  end
-
-  opts.on("-h", "--help", "Show this help") do
-    puts opts
-    exit
-  end
-end.parse!
-
-queue = Sift::Queue.new(options[:queue_path])
-Sift::ReviewLoop.new(queue: queue, model: options[:model]).run
+exit Sift::CLI::SiftCommand.new(ARGV).run
