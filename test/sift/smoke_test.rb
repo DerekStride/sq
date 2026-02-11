@@ -22,6 +22,14 @@ class SmokeTest < Minitest::Test
     assert_includes stdout, "Usage: sift"
   end
 
+  def test_sift_empty_queue_exits_gracefully
+    Dir.mktmpdir("sift_smoke_") do |dir|
+      env = { "SIFT_QUEUE_PATH" => File.join(dir, "queue.jsonl") }
+      _stdout, stderr, status = Open3.capture3(env, "bundle", "exec", EXE_SIFT)
+      assert status.success?, "sift with empty queue failed: #{stderr}"
+    end
+  end
+
   def test_sq_help
     stdout, stderr, status = Open3.capture3("bundle", "exec", EXE_SQ, "--help")
     assert status.success?, "sq --help failed: #{stderr}"

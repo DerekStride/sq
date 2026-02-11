@@ -5,20 +5,15 @@ require "sift"
 require "optparse"
 
 options = {
-  path: Dir.pwd,
-  base: "HEAD",
-  model: "sonnet"
+  queue_path: ENV.fetch("SIFT_QUEUE_PATH", Sift::CLI::DEFAULT_QUEUE_PATH),
+  model: "sonnet",
 }
 
 OptionParser.new do |opts|
   opts.banner = "Usage: sift [options]"
 
-  opts.on("-p", "--path PATH", "Repository path (default: current dir)") do |p|
-    options[:path] = p
-  end
-
-  opts.on("-b", "--base REF", "Base ref for diff (default: HEAD)") do |b|
-    options[:base] = b
+  opts.on("-q", "--queue PATH", "Queue file path (default: #{Sift::CLI::DEFAULT_QUEUE_PATH})") do |q|
+    options[:queue_path] = q
   end
 
   opts.on("-m", "--model MODEL", "Claude model (default: sonnet)") do |m|
@@ -36,4 +31,5 @@ OptionParser.new do |opts|
   end
 end.parse!
 
-Sift::ReviewLoop.new(**options).run
+queue = Sift::Queue.new(options[:queue_path])
+Sift::ReviewLoop.new(queue: queue, model: options[:model]).run
