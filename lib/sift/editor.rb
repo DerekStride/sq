@@ -8,6 +8,9 @@ module Sift
     # GUI editors that need --wait to block the process
     WAIT_EDITORS = %w[code subl atom fleet zed].freeze
 
+    # Terminal editors that support -p for tab-per-file
+    TAB_EDITORS = %w[vi vim nvim].freeze
+
     def initialize(sources:, item_id:)
       @sources = sources
       @item_id = item_id
@@ -31,6 +34,8 @@ module Sift
       binary = ::File.basename(parts.first)
       if WAIT_EDITORS.include?(binary)
         parts << "--wait" unless parts.include?("--wait")
+      elsif TAB_EDITORS.include?(binary)
+        parts << "-p" unless parts.include?("-p")
       end
       parts
     end

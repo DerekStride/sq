@@ -50,10 +50,34 @@ class Sift::EditorTest < Minitest::Test
     assert_equal ["subl", "--wait"], editor.editor_command
   end
 
-  def test_editor_command_no_wait_for_vim
+  def test_editor_command_adds_tab_flag_for_vim
     ENV["EDITOR"] = "vim"
     editor = Sift::Editor.new(sources: [], item_id: "test")
-    assert_equal ["vim"], editor.editor_command
+    assert_equal ["vim", "-p"], editor.editor_command
+  end
+
+  def test_editor_command_adds_tab_flag_for_nvim
+    ENV["EDITOR"] = "nvim"
+    editor = Sift::Editor.new(sources: [], item_id: "test")
+    assert_equal ["nvim", "-p"], editor.editor_command
+  end
+
+  def test_editor_command_adds_tab_flag_for_vi
+    ENV["EDITOR"] = "vi"
+    editor = Sift::Editor.new(sources: [], item_id: "test")
+    assert_equal ["vi", "-p"], editor.editor_command
+  end
+
+  def test_editor_command_no_duplicate_tab_flag
+    ENV["EDITOR"] = "nvim -p"
+    editor = Sift::Editor.new(sources: [], item_id: "test")
+    assert_equal ["nvim", "-p"], editor.editor_command
+  end
+
+  def test_editor_command_no_flags_for_nano
+    ENV["EDITOR"] = "nano"
+    editor = Sift::Editor.new(sources: [], item_id: "test")
+    assert_equal ["nano"], editor.editor_command
   end
 
   def test_editor_command_no_duplicate_wait
