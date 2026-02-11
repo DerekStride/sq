@@ -4,53 +4,65 @@ require "cli/ui"
 
 module Sift
   class ReviewLoop
-    def initialize(path:, base: "HEAD", model: "sonnet")
-      @path = File.expand_path(path)
-      @base = base
+    include SourceViewer
+
+    def initialize(queue:, model: "sonnet")
+      @queue = queue
       @client = Client.new(model: model)
-      @hunks = []
+      @items = []
       @current = 0
-      @decisions = []
-      @sessions = {} # file -> session_id for continuity
-      @analyses = {} # hunk index -> analysis result
+      @source_index = 0
+      @analyses = {} # item index -> analysis result
     end
 
     def run
       setup_ui
-      load_hunks
-      return if @hunks.empty?
+      load_items
+      return if @items.empty?
 
       show_header
 
       loop do
-        break if @current >= @hunks.length
+        break if @current >= @items.length
 
-        hunk = @hunks[@current]
-        display_hunk(hunk)
+        item = @items[@current]
+        setup_item(item)
+        display_current_source(width: terminal_width)
 
-        action = prompt_action(has_analysis: @analyses.key?(@current))
+        action = prompt_action(
+          has_analysis: @analyses.key?(@current),
+          multi_source: multi_source?,
+        )
         break if action == :quit
 
         case action
+        when :next_source
+          next_source
+          redo
+        when :prev_source
+          prev_source
+          redo
+        when :browse_sources
+          drill_down_file_browser
+          redo
         when :analyze
-          analysis = analyze_hunk(hunk)
+          analysis = analyze_item(item)
           @analyses[@current] = analysis
           display_analysis(analysis)
-          redo # Show prompt again for same hunk
+          redo
         when :revise
-          # Can only revise if we have analysis
           unless @analyses.key?(@current)
             puts ::CLI::UI.fmt("{{yellow:No analysis to revise. Press '?' first.}}")
             redo
           end
           feedback = ::CLI::UI::Prompt.ask("Revision feedback:")
           puts ::CLI::UI.fmt("{{magenta:↻ Revising...}}")
-          revised = revise_analysis(hunk, feedback)
+          revised = revise_analysis(item, feedback)
           @analyses[@current] = revised
           display_analysis(revised)
           redo
         else
-          handle_action(action, hunk)
+          handle_action(action, item)
           @current += 1
         end
       end
@@ -65,40 +77,33 @@ module Sift
       ::CLI::UI.frame_style = :box
     end
 
-    def load_hunks
-      ::CLI::UI::Spinner.spin("Loading diff hunks...") do |spinner|
-        @hunks = DiffParser.from_git(@path, base: @base)
-        spinner.update_title("Found #{@hunks.length} hunks")
+    def load_items
+      ::CLI::UI::Spinner.spin("Loading queue items...") do |spinner|
+        @items = @queue.filter(status: "pending")
+        spinner.update_title("Found #{@items.length} pending items")
       end
 
-      if @hunks.empty?
-        puts ::CLI::UI.fmt("{{yellow:No changes found.}}")
+      if @items.empty?
+        puts ::CLI::UI.fmt("{{yellow:No pending items in queue.}}")
       end
+    end
+
+    def setup_item(item)
+      @sources = item.sources
+      @source_index = 0
+    end
+
+    # Override SourceViewer's sources_list to use @sources set by setup_item
+    def sources_list
+      @sources || []
     end
 
     def show_header
       puts
       ::CLI::UI::Frame.open("{{bold:Sift Review}}", color: :blue) do
-        puts ::CLI::UI.fmt("{{cyan:Reviewing #{@hunks.length} hunks in}} {{bold:#{@path}}}")
-        puts ::CLI::UI.fmt("{{gray:Base: #{@base}}}")
+        puts ::CLI::UI.fmt("{{cyan:Reviewing}} {{bold:#{@items.length}}} {{cyan:pending items}}")
+        puts ::CLI::UI.fmt("{{gray:Queue: #{@queue.path}}}")
       end
-    end
-
-    def display_hunk(hunk)
-      source = Queue::Source.new(type: "diff", path: hunk.file, content: hunk.content)
-      renderer = Source::Diff.new(source)
-      lines = renderer.render(width: terminal_width)
-
-      puts
-      ::CLI::UI::Frame.open("{{bold:#{hunk.file}}} {{cyan:(#{@current + 1}/#{@hunks.length})}}", color: :yellow) do
-        lines.each { |line| puts line }
-      end
-    end
-
-    def terminal_width
-      IO.console&.winsize&.last || 80
-    rescue
-      80
     end
 
     def display_analysis(analysis)
@@ -108,35 +113,37 @@ module Sift
       end
     end
 
-    def analyze_hunk(hunk)
-      result = nil
-      ::CLI::UI::Spinner.spin("Asking Claude...") do |spinner|
-        session_id = @sessions[hunk.file]
-        result = @client.analyze_diff(
-          hunk.content,
-          file: hunk.file,
-          session_id: session_id
-        )
-        @sessions[hunk.file] = result.session_id
-        spinner.update_title("Done")
-      end
-      result
-    end
-
-    def prompt_action(has_analysis:)
+    def prompt_action(has_analysis:, multi_source: false)
       puts
+      parts = []
+      parts << "[{{green:a}}]ccept"
+      parts << "[{{red:r}}]eject"
+      parts << "[{{yellow:c}}]omment"
+
       if has_analysis
-        puts ::CLI::UI.fmt("{{bold:Actions:}} [{{green:a}}]ccept  [{{red:r}}]eject  [{{yellow:c}}]omment  [{{magenta:v}}]revise  [{{blue:?}}]ask again  [{{cyan:q}}]uit")
+        parts << "[{{magenta:v}}]revise"
+        parts << "[{{blue:?}}]ask again"
       else
-        puts ::CLI::UI.fmt("{{bold:Actions:}} [{{green:a}}]ccept  [{{red:r}}]eject  [{{yellow:c}}]omment  [{{blue:?}}]ask Claude  [{{cyan:q}}]uit")
+        parts << "[{{blue:?}}]ask Claude"
       end
+
+      if multi_source
+        parts << "[{{cyan:n}}]ext source"
+        parts << "[{{cyan:p}}]rev source"
+        parts << "[{{cyan:s}}]ources"
+      end
+
+      parts << "[{{gray:q}}]uit"
+
+      puts ::CLI::UI.fmt("{{bold:Actions:}} #{parts.join("  ")}")
+      puts ::CLI::UI.fmt("{{gray:Item #{@items[@current].id} (#{@current + 1}/#{@items.length})}}")
       print ::CLI::UI.fmt("{{bold:Choice:}} ")
 
       loop do
         char = ::CLI::UI::Prompt.read_char
         case char.downcase
         when "a"
-          puts ::CLI::UI.fmt("{{green:✓ Accepted}}")
+          puts ::CLI::UI.fmt("{{green:✓ Approved}}")
           return :accept
         when "r"
           puts ::CLI::UI.fmt("{{red:✗ Rejected}}")
@@ -147,10 +154,16 @@ module Sift
           puts ::CLI::UI.fmt("{{yellow:💬 Commented}}")
           return [:comment, comment]
         when "v"
-          return :revise
+          return :revise if has_analysis
         when "?"
           puts ::CLI::UI.fmt("{{blue:🤖 Analyzing...}}")
           return :analyze
+        when "n"
+          return :next_source if multi_source
+        when "p"
+          return :prev_source if multi_source
+        when "s"
+          return :browse_sources if multi_source
         when "q"
           puts ::CLI::UI.fmt("{{cyan:Quitting...}}")
           return :quit
@@ -158,61 +171,81 @@ module Sift
       end
     end
 
-    def handle_action(action, hunk)
-      analysis = @analyses[@current]
+    def handle_action(action, item)
       case action
       when :accept
-        perform_git_action(:accept, hunk)
-        @decisions << { file: hunk.file, action: :accept, response: analysis&.response }
+        @queue.update(item.id, status: "approved")
       when :reject
-        perform_git_action(:reject, hunk)
-        @decisions << { file: hunk.file, action: :reject, response: analysis&.response }
+        @queue.update(item.id, status: "rejected")
       when Array
         type, content = action
-        @decisions << { file: hunk.file, action: type, comment: content, response: analysis&.response }
+        if type == :comment
+          metadata = (item.metadata || {}).merge("comment" => content)
+          @queue.update(item.id, metadata: metadata)
+        end
       end
     end
 
-    def perform_git_action(action, hunk)
-      case action
-      when :accept
-        GitActions.stage_hunk(hunk, path: @path)
-        puts ::CLI::UI.fmt("{{green:Staged hunk}}")
-      when :reject
-        GitActions.revert_hunk(hunk, path: @path)
-        puts ::CLI::UI.fmt("{{red:Reverted hunk}}")
-      end
-    rescue GitActions::Error => e
-      puts ::CLI::UI.fmt("{{red:Git error: #{e.message}}}")
-    end
-
-    def revise_analysis(hunk, feedback)
+    def analyze_item(item)
       result = nil
-      ::CLI::UI::Spinner.spin("Re-analyzing with feedback...") do |spinner|
-        session_id = @sessions[hunk.file]
-        prompt = "User feedback on your analysis: #{feedback}\n\nPlease revise your review."
-        result = @client.prompt(prompt, session_id: session_id)
-        @sessions[hunk.file] = result.session_id
+      ::CLI::UI::Spinner.spin("Asking Claude...") do |spinner|
+        prompt_text = build_analysis_prompt(item)
+        result = @client.prompt(prompt_text, session_id: item.session_id)
+        @queue.update(item.id, session_id: result.session_id)
         spinner.update_title("Done")
       end
       result
     end
 
+    def revise_analysis(item, feedback)
+      result = nil
+      ::CLI::UI::Spinner.spin("Re-analyzing with feedback...") do |spinner|
+        prompt_text = "User feedback on your analysis: #{feedback}\n\nPlease revise your review."
+        result = @client.prompt(prompt_text, session_id: item.session_id)
+        @queue.update(item.id, session_id: result.session_id)
+        spinner.update_title("Done")
+      end
+      result
+    end
+
+    def build_analysis_prompt(item)
+      parts = []
+      item.sources.each do |source|
+        case source.type
+        when "diff"
+          parts << "File: #{source.path}" if source.path
+          parts << "Diff:"
+          parts << "```diff"
+          parts << source.content
+          parts << "```"
+        when "file"
+          parts << "File: #{source.path}" if source.path
+          parts << "```"
+          parts << (source.content || "")
+          parts << "```"
+        when "transcript"
+          parts << "Previous conversation:"
+          parts << (source.content || "")
+        when "text"
+          parts << (source.content || "")
+        end
+        parts << ""
+      end
+      parts << "Review this item. Be concise (1-2 sentences). Focus on potential issues, improvements, or confirm it looks good."
+      parts.join("\n")
+    end
+
     def show_summary
+      items = @queue.all
+      approved = items.count(&:approved?)
+      rejected = items.count(&:rejected?)
+      pending = items.count(&:pending?)
+
       puts
       ::CLI::UI::Frame.open("{{bold:Review Summary}}", color: :green) do
-        if @decisions.empty?
-          puts ::CLI::UI.fmt("{{yellow:No decisions recorded.}}")
-        else
-          staged = @decisions.count { |d| d[:action] == :accept }
-          reverted = @decisions.count { |d| d[:action] == :reject }
-          commented = @decisions.count { |d| d[:action] == :comment }
-
-          puts ::CLI::UI.fmt("{{green:Staged:}} #{staged}")
-          puts ::CLI::UI.fmt("{{red:Reverted:}} #{reverted}")
-          puts ::CLI::UI.fmt("{{yellow:Commented:}} #{commented}")
-          puts ::CLI::UI.fmt("{{cyan:Remaining:}} #{@hunks.length - @current}")
-        end
+        puts ::CLI::UI.fmt("{{green:Approved:}} #{approved}")
+        puts ::CLI::UI.fmt("{{red:Rejected:}} #{rejected}")
+        puts ::CLI::UI.fmt("{{cyan:Remaining:}} #{pending}")
       end
     end
   end

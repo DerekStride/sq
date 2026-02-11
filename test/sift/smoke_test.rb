@@ -49,7 +49,7 @@ class SmokeTest < Minitest::Test
     # Verify ReviewLoop loads without NameError on CLI::UI
     stdout, stderr, status = Open3.capture3(
       "bundle", "exec", "ruby", "-e",
-      'require "sift"; Sift::ReviewLoop.new(path: ".")'
+      'require "sift"; q = Sift::Queue.new("/tmp/sift_smoke_test.jsonl"); Sift::ReviewLoop.new(queue: q)'
     )
     assert status.success?, "ReviewLoop.new failed: #{stderr}"
   end
