@@ -1,0 +1,1 @@
+Human: Can you review this authentication change? We switched from session-based auth to JWT tokens.

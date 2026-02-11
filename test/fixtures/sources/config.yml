@@ -1,0 +1,21 @@
+app:
+  name: "Acme Dashboard"
+  version: "2.1.0"
+  environment: production
+
+database:
+  adapter: postgresql
+  host: localhost
+  port: 5432
+  pool: 10
+  timeout: 5000
+
+cache:
+  store: redis
+  url: redis://localhost:6379/0
+  expires_in: 3600
+
+logging:
+  level: info
+  format: json
+  output: stdout
