@@ -10,6 +10,7 @@ module Sift
         "sift",
         "sift --queue .sift/queue.jsonl",
         "sift --model opus",
+        "sift --system-prompt prompts/review.md",
         "sift --dry"
       )
 
@@ -27,6 +28,9 @@ module Sift
         parser.on("-c", "--concurrency N", Integer, "Max concurrent agents (default: 5)") do |v|
           options[:concurrency] = v
         end
+        parser.on("-s", "--system-prompt PATH", "System prompt file for agent invocations") do |v|
+          options[:system_prompt_path] = v
+        end
         parser.on("--dry", "Dry mode: skip Claude API calls, print prompts instead") do
           options[:dry] = true
         end
@@ -38,14 +42,29 @@ module Sift
       end
 
       def execute
+        system_prompt = read_system_prompt(options[:system_prompt_path])
         queue = Sift::Queue.new(options[:queue_path])
         Sift::ReviewLoop.new(
           queue: queue,
           model: options[:model],
           dry: options[:dry],
           concurrency: options[:concurrency],
+          system_prompt: system_prompt,
         ).run
         0
+      end
+
+      private
+
+      def read_system_prompt(path)
+        return nil unless path
+
+        unless File.exist?(path)
+          stderr.puts "Error: system prompt file not found: #{path}"
+          exit 1
+        end
+
+        File.read(path)
       end
     end
   end

@@ -36,6 +36,12 @@ class Sift::ReviewLoopTest < Minitest::Test
     assert_instance_of Sift::Client, client
   end
 
+  def test_initializes_with_system_prompt
+    loop = Sift::ReviewLoop.new(queue: @queue, system_prompt: "You are a reviewer.")
+    client = loop.instance_variable_get(:@client)
+    assert_equal "You are a reviewer.", client.instance_variable_get(:@system_prompt)
+  end
+
   # --- build_agent_prompt tests ---
 
   def test_build_agent_prompt_first_turn_includes_sources

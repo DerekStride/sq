@@ -65,3 +65,21 @@ class Sift::DryClientTest < Minitest::Test
     assert_includes stderr, "model=default"
   end
 end
+
+class Sift::ClientBuildArgsTest < Minitest::Test
+  def test_build_args_includes_system_prompt
+    client = Sift::Client.new(system_prompt: "You are a reviewer.")
+    args = client.send(:build_args)
+
+    assert_includes args, "--system-prompt"
+    idx = args.index("--system-prompt")
+    assert_equal "You are a reviewer.", args[idx + 1]
+  end
+
+  def test_build_args_excludes_system_prompt_when_nil
+    client = Sift::Client.new
+    args = client.send(:build_args)
+
+    refute_includes args, "--system-prompt"
+  end
+end

@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "stringio"
+require "tempfile"
 
 class Sift::CLI::SiftCommandTest < Minitest::Test
   include TestHelpers
@@ -85,6 +86,38 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     assert_equal 10, cmd.options[:concurrency]
   end
 
+  def test_system_prompt_flag
+    tmpfile = Tempfile.new(["sp-", ".md"])
+    tmpfile.write("You are a code reviewer.")
+    tmpfile.close
+
+    cmd = Sift::CLI::SiftCommand.new(["--system-prompt", tmpfile.path], stdout: @stdout, stderr: @stderr)
+    cmd.send(:build_option_parser).parse!(cmd.argv)
+
+    assert_equal tmpfile.path, cmd.options[:system_prompt_path]
+  ensure
+    tmpfile&.unlink
+  end
+
+  def test_system_prompt_short_flag
+    tmpfile = Tempfile.new(["sp-", ".md"])
+    tmpfile.write("You are a code reviewer.")
+    tmpfile.close
+
+    cmd = Sift::CLI::SiftCommand.new(["-s", tmpfile.path], stdout: @stdout, stderr: @stderr)
+    cmd.send(:build_option_parser).parse!(cmd.argv)
+
+    assert_equal tmpfile.path, cmd.options[:system_prompt_path]
+  ensure
+    tmpfile&.unlink
+  end
+
+  def test_help_includes_system_prompt_flag
+    run_command(["--help"])
+
+    assert_includes stdout_output, "--system-prompt"
+  end
+
   def test_help_includes_dry_flag
     run_command(["--help"])
 
@@ -95,6 +128,14 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     run_command(["--help"])
 
     assert_includes stdout_output, "--concurrency"
+  end
+
+  def test_system_prompt_missing_file_exits_with_error
+    assert_raises(SystemExit) do
+      run_command(["--system-prompt", "/nonexistent/prompt.md"])
+    end
+
+    assert_includes stderr_output, "system prompt file not found"
   end
 
   def test_invalid_flag_returns_error

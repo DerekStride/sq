@@ -7,9 +7,9 @@ require "tempfile"
 
 module Sift
   class ReviewLoop
-    def initialize(queue:, model: "sonnet", dry: false, concurrency: 5)
+    def initialize(queue:, model: "sonnet", dry: false, concurrency: 5, system_prompt: nil)
       @queue = queue
-      @client = dry ? DryClient.new(model: model) : Client.new(model: model)
+      @client = dry ? DryClient.new(model: model) : Client.new(model: model, system_prompt: system_prompt)
       @concurrency = concurrency
     end
 

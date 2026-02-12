@@ -10,8 +10,9 @@ module Sift
 
     Result = Struct.new(:response, :session_id, :raw, keyword_init: true)
 
-    def initialize(model: nil)
+    def initialize(model: nil, system_prompt: nil)
       @model = model
+      @system_prompt = system_prompt
     end
 
     # Send a prompt to Claude, optionally resuming a session
@@ -44,6 +45,7 @@ module Sift
     def build_args(session_id: nil)
       args = ["claude", "-p", "--output-format", "json"]
       args += ["--model", @model] if @model
+      args += ["--system-prompt", @system_prompt] if @system_prompt
       args += ["--resume", session_id] if session_id
       args
     end
