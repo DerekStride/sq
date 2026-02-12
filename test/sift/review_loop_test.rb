@@ -173,6 +173,30 @@ class Sift::ReviewLoopTest < Minitest::Test
     end
   end
 
+  def test_quit_saves_completed_agent_transcripts
+    item = @queue.push(sources: [{ type: "text", content: "original" }])
+    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+      rl.instance_variable_set(:@agent_runner, runner)
+
+      runner.spawn(item.id, "prompt text", "user question")
+      task.yield
+
+      # Agent has completed but hasn't been polled yet — simulate quit
+      capture_cli_ui_output do
+        rl.send(:process_completed_agents)
+        runner.stop_all
+      end
+
+      updated = @queue.find(item.id)
+      assert_equal 2, updated.sources.size
+      assert_equal "transcript", updated.sources.last.type
+      assert_includes updated.sources.last.content, "user question"
+    end
+  end
+
   private
 
   def capture_cli_ui_output

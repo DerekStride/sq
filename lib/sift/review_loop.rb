@@ -66,6 +66,7 @@ module Sift
           handle_close(item)
           return :next
         when :quit
+          process_completed_agents
           @agent_runner.stop_all
           return :quit
         end
@@ -159,9 +160,12 @@ module Sift
         user_prompt = data[:prompt]
 
         if result
+          content = SessionTranscript.render(result.session_id) ||
+            "User: #{user_prompt}\n\nAssistant: #{result.response}"
+
           transcript_source = Queue::Source.new(
             type: "transcript",
-            content: "User: #{user_prompt}\n\nAssistant: #{result.response}",
+            content: content,
           )
           item = @queue.find(item_id)
           next unless item
