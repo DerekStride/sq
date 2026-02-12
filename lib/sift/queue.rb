@@ -200,6 +200,32 @@ module Sift
       end
     end
 
+    # Atomically claim a pending item by setting it to in_progress.
+    # Returns the claimed Item, or nil if the item is not pending.
+    # When a block is given, auto-releases back to pending after the block.
+    def claim(id)
+      item = with_exclusive_lock do |f|
+        items = read_items(f)
+        index = items.index { |i| i.id == id && i.pending? }
+        return nil unless index
+
+        updated = Item.new(**items[index].to_h.merge(
+          status: "in_progress", updated_at: Time.now.utc.iso8601
+        ))
+        items[index] = updated
+        rewrite_items(f, items)
+        updated
+      end
+
+      return item unless block_given?
+
+      begin
+        yield item
+      ensure
+        release(id)
+      end
+    end
+
     # Clear all items from the queue
     def clear
       with_exclusive_lock do |f|
@@ -208,6 +234,23 @@ module Sift
     end
 
     private
+
+    # Release an in_progress item back to pending.
+    # No-ops if the status was changed externally (e.g. manually closed).
+    def release(id)
+      with_exclusive_lock do |f|
+        items = read_items(f)
+        index = items.index { |i| i.id == id && i.in_progress? }
+        return nil unless index
+
+        updated = Item.new(**items[index].to_h.merge(
+          status: "pending", updated_at: Time.now.utc.iso8601
+        ))
+        items[index] = updated
+        rewrite_items(f, items)
+        updated
+      end
+    end
 
     # Acquire an exclusive lock (LOCK_EX) on the queue file.
     # Creates the file if it doesn't exist. Blocks until lock is available.

@@ -8,9 +8,10 @@ module Sift
   # Each agent runs as a child fiber of the parent Async task, gated
   # by a semaphore for future concurrency limiting.
   class AgentRunner
-    def initialize(client:, task:, limit: 1000)
+    def initialize(client:, task:, queue: nil, limit: 1000)
       @client = client
       @task = task
+      @queue = queue
       @semaphore = Async::Semaphore.new(limit, parent: task)
       @agents = {} # item_id -> { task:, prompt:, started_at:, general: }
       @general_counter = 0
@@ -23,7 +24,14 @@ module Sift
 
       agent_task = @semaphore.async do
         Log.debug "agent running item=#{item_id}"
-        @client.prompt(prompt_text, session_id: session_id, system_prompt: system_prompt)
+        if @queue
+          @queue.claim(item_id) do |claimed_item|
+            next nil unless claimed_item
+            @client.prompt(prompt_text, session_id: session_id, system_prompt: system_prompt)
+          end
+        else
+          @client.prompt(prompt_text, session_id: session_id, system_prompt: system_prompt)
+        end
       rescue Client::Error => e
         Log.warn "agent error item=#{item_id}: #{e.message}"
         e
@@ -66,6 +74,9 @@ module Sift
           if result.is_a?(Client::Error)
             Log.debug "agent error item=#{item_id} elapsed=#{elapsed}s"
             completed[item_id] = { result: nil, error: result.message, prompt: agent[:prompt], general: agent[:general] }
+          elsif result.nil?
+            Log.debug "agent claim failed item=#{item_id} elapsed=#{elapsed}s"
+            completed[item_id] = { result: nil, error: nil, prompt: agent[:prompt], general: agent[:general], claim_failed: true }
           else
             Log.debug "agent completed item=#{item_id} elapsed=#{elapsed}s"
             completed[item_id] = { result: result, prompt: agent[:prompt], general: agent[:general] }

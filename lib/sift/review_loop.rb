@@ -18,7 +18,7 @@ module Sift
     def run
       Sync do |task|
         setup_ui
-        @agent_runner = AgentRunner.new(client: @client, task: task, limit: @concurrency)
+        @agent_runner = AgentRunner.new(client: @client, task: task, queue: @queue, limit: @concurrency)
         main_loop
       end
     end
@@ -31,6 +31,7 @@ module Sift
     end
 
     def main_loop
+      warn_stale_items
       index = 0
 
       loop do
@@ -161,7 +162,7 @@ module Sift
 
     def status_line
       pending = @queue.count(status: "pending")
-      running = @agent_runner.running_count
+      running = @queue.count(status: "in_progress")
       return nil if running == 0
 
       "{{gray:[#{pending} pending | #{running} running]}}"
@@ -236,6 +237,11 @@ module Sift
     end
 
     def process_completed_item_agent(item_id, data)
+      if data[:claim_failed]
+        Log.debug "agent claim failed for item=#{item_id}, skipping"
+        return
+      end
+
       result = data[:result]
       error = data[:error]
       user_prompt = data[:prompt]
@@ -292,6 +298,15 @@ module Sift
 
     def handle_close(item)
       @queue.update(item.id, status: "closed")
+    end
+
+    def warn_stale_items
+      stale = @queue.filter(status: "in_progress")
+      return if stale.empty?
+
+      Log.warn "#{stale.size} item(s) still in_progress from a previous session"
+      stale.each { |item| Log.warn "  #{item.id} (updated: #{item.updated_at})" }
+      Log.warn "Release with: sq edit <id> --set-status pending"
     end
 
     def read_agent_prompt

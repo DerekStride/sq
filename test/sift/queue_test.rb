@@ -486,6 +486,111 @@ class Sift::QueueTest < Minitest::Test
     end
   end
 
+  # --- claim tests ---
+
+  def test_claim_pending_item
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+
+    claimed = @queue.claim(item.id)
+
+    assert_equal item.id, claimed.id
+    assert_equal "in_progress", claimed.status
+    assert_equal "in_progress", @queue.find(item.id).status
+  end
+
+  def test_claim_already_in_progress
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    @queue.update(item.id, status: "in_progress")
+
+    result = @queue.claim(item.id)
+
+    assert_nil result
+  end
+
+  def test_claim_closed_item
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    @queue.update(item.id, status: "closed")
+
+    result = @queue.claim(item.id)
+
+    assert_nil result
+  end
+
+  def test_claim_nonexistent_item
+    result = @queue.claim("nonexistent")
+
+    assert_nil result
+  end
+
+  def test_claim_with_block_releases
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+
+    @queue.claim(item.id) do |claimed|
+      assert_equal "in_progress", @queue.find(item.id).status
+    end
+
+    assert_equal "pending", @queue.find(item.id).status
+  end
+
+  def test_claim_with_block_releases_on_error
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+
+    assert_raises(RuntimeError) do
+      @queue.claim(item.id) do |claimed|
+        raise "boom"
+      end
+    end
+
+    assert_equal "pending", @queue.find(item.id).status
+  end
+
+  def test_claim_block_yields_item
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    yielded = nil
+
+    @queue.claim(item.id) do |claimed|
+      yielded = claimed
+    end
+
+    assert_equal item.id, yielded.id
+    assert_equal "in_progress", yielded.status
+  end
+
+  def test_concurrent_claims
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+
+    r1, w1 = IO.pipe
+    r2, w2 = IO.pipe
+
+    pid1 = fork do
+      r1.close; r2.close
+      queue = Sift::Queue.new(@queue_path)
+      result = queue.claim(item.id)
+      w1.puts(result ? "claimed" : "nil")
+      w1.close; w2.close
+    end
+
+    pid2 = fork do
+      r1.close; r2.close
+      queue = Sift::Queue.new(@queue_path)
+      result = queue.claim(item.id)
+      w2.puts(result ? "claimed" : "nil")
+      w1.close; w2.close
+    end
+
+    w1.close; w2.close
+
+    result1 = r1.gets&.strip
+    result2 = r2.gets&.strip
+    r1.close; r2.close
+
+    Process.waitpid(pid1)
+    Process.waitpid(pid2)
+
+    results = [result1, result2].sort
+    assert_equal ["claimed", "nil"], results, "Exactly one process should claim the item"
+  end
+
   # --- File locking tests ---
 
   def test_concurrent_pushes_produce_unique_ids
