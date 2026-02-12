@@ -39,6 +39,10 @@ module Sift
             options[:stdin_type] = type
           end
 
+          parser.on("--system-prompt PATH", "Attach a system prompt file to this item") do |path|
+            options[:system_prompt] = path
+          end
+
           parser.on("--metadata JSON", "Attach metadata as JSON") do |json|
             options[:metadata] = parse_json(json, "metadata")
           end
@@ -58,7 +62,10 @@ module Sift
             return 1
           end
 
-          item = queue.push(sources: options[:sources], metadata: options[:metadata])
+          metadata = options[:metadata]
+          metadata["system_prompt"] = options[:system_prompt] if options[:system_prompt]
+
+          item = queue.push(sources: options[:sources], metadata: metadata)
           stdout.puts item.id
           Sift::Log.info "Added item #{item.id} with #{item.sources.length} source(s)"
           0

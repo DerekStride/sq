@@ -3,6 +3,7 @@
 require "json"
 require "fileutils"
 require "securerandom"
+require "sift/log"
 
 module Sift
   # Persistent queue for review items stored as JSONL
@@ -94,19 +95,24 @@ module Sift
     def push(sources:, metadata: {}, session_id: nil)
       validate_sources!(sources)
 
-      now = Time.now.utc.iso8601
-      item = Item.new(
-        id: generate_id,
-        status: "pending",
-        sources: normalize_sources(sources),
-        metadata: metadata,
-        session_id: session_id,
-        created_at: now,
-        updated_at: now
-      )
+      with_exclusive_lock do |f|
+        existing_ids = read_items(f).map(&:id).to_set
 
-      append_item(item)
-      item
+        now = Time.now.utc.iso8601
+        item = Item.new(
+          id: generate_id(existing_ids),
+          status: "pending",
+          sources: normalize_sources(sources),
+          metadata: metadata,
+          session_id: session_id,
+          created_at: now,
+          updated_at: now
+        )
+
+        f.seek(0, IO::SEEK_END)
+        f.puts(item.to_json)
+        item
+      end
     end
 
     # Iterate over pending items
@@ -117,28 +123,30 @@ module Sift
     # Update an item by ID
     # Returns the updated Item or nil if not found
     def update(id, **attrs)
-      items = all
-      index = items.index { |item| item.id == id }
-      return nil unless index
+      with_exclusive_lock do |f|
+        items = read_items(f)
+        index = items.index { |item| item.id == id }
+        return nil unless index
 
-      item = items[index]
+        item = items[index]
 
-      # Validate status if provided
-      if attrs[:status]
-        status = attrs[:status].to_s
-        unless VALID_STATUSES.include?(status)
-          raise Error, "Invalid status: #{status}. Valid: #{VALID_STATUSES.join(", ")}"
+        # Validate status if provided
+        if attrs[:status]
+          status = attrs[:status].to_s
+          unless VALID_STATUSES.include?(status)
+            raise Error, "Invalid status: #{status}. Valid: #{VALID_STATUSES.join(", ")}"
+          end
+          attrs[:status] = status
         end
-        attrs[:status] = status
+
+        # Update fields
+        attrs[:updated_at] = Time.now.utc.iso8601
+        updated_item = Item.new(**item.to_h.merge(attrs))
+        items[index] = updated_item
+
+        rewrite_items(f, items)
+        updated_item
       end
-
-      # Update fields
-      attrs[:updated_at] = Time.now.utc.iso8601
-      updated_item = Item.new(**item.to_h.merge(attrs))
-      items[index] = updated_item
-
-      write_all(items)
-      updated_item
     end
 
     # Find an item by ID
@@ -157,19 +165,11 @@ module Sift
 
     # Get all items
     # Returns array of Items
+    # Skips corrupt/unparseable lines with a warning rather than failing
     def all
-      return [] unless File.exist?(@path)
-
-      items = []
-      File.foreach(@path) do |line|
-        next if line.strip.empty?
-
-        data = JSON.parse(line)
-        items << Item.from_h(data)
+      with_shared_lock do |f|
+        read_items(f)
       end
-      items
-    rescue JSON::ParserError => e
-      raise Error, "Failed to parse queue file: #{e.message}"
     end
 
     # Count items, optionally by status
@@ -180,32 +180,86 @@ module Sift
     # Remove an item by ID
     # Returns the removed Item or nil
     def remove(id)
-      items = all
-      removed = nil
-      items.reject! do |item|
-        if item.id == id
-          removed = item
-          true
-        else
-          false
+      with_exclusive_lock do |f|
+        items = read_items(f)
+        removed = nil
+        items.reject! do |item|
+          if item.id == id
+            removed = item
+            true
+          else
+            false
+          end
         end
-      end
 
-      write_all(items) if removed
-      removed
+        rewrite_items(f, items) if removed
+        removed
+      end
     end
 
     # Clear all items from the queue
     def clear
-      write_all([])
+      with_exclusive_lock do |f|
+        rewrite_items(f, [])
+      end
     end
 
     private
 
-    def generate_id
-      # Generate a short unique ID (3 alphanumeric chars like beads tool)
+    # Acquire an exclusive lock (LOCK_EX) on the queue file.
+    # Creates the file if it doesn't exist. Blocks until lock is available.
+    def with_exclusive_lock
+      ensure_directory
+      File.open(@path, File::RDWR | File::CREAT) do |f|
+        f.flock(File::LOCK_EX)
+        yield(f)
+      end
+    end
+
+    # Acquire a shared lock (LOCK_SH) on the queue file.
+    # Returns empty array via yield(nil) if file doesn't exist.
+    def with_shared_lock
+      unless File.exist?(@path)
+        return yield(nil)
+      end
+
+      File.open(@path, "r") do |f|
+        f.flock(File::LOCK_SH)
+        yield(f)
+      end
+    end
+
+    # Read items from an IO, skipping corrupt lines with warnings.
+    def read_items(io)
+      return [] if io.nil?
+
+      io.rewind
+      items = []
+      io.each_line.with_index(1) do |line, line_num|
+        next if line.strip.empty?
+
+        begin
+          data = JSON.parse(line)
+          items << Item.from_h(data)
+        rescue JSON::ParserError => e
+          Sift::Log.warn("Skipping corrupt line #{line_num} in #{@path}: #{e.message}")
+        end
+      end
+      items
+    end
+
+    # Truncate and rewrite all items to the file descriptor.
+    def rewrite_items(f, items)
+      f.rewind
+      f.truncate(0)
+      items.each do |item|
+        f.puts(item.to_json)
+      end
+      f.flush
+    end
+
+    def generate_id(existing_ids)
       chars = ("a".."z").to_a + ("0".."9").to_a
-      existing_ids = all.map(&:id).to_set
 
       loop do
         id = 3.times.map { chars.sample }.join
@@ -230,22 +284,6 @@ module Sift
           source
         else
           Source.from_h(source)
-        end
-      end
-    end
-
-    def append_item(item)
-      ensure_directory
-      File.open(@path, "a") do |f|
-        f.puts(item.to_json)
-      end
-    end
-
-    def write_all(items)
-      ensure_directory
-      File.open(@path, "w") do |f|
-        items.each do |item|
-          f.puts(item.to_json)
         end
       end
     end
