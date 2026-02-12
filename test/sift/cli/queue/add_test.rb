@@ -119,7 +119,7 @@ class Sift::CLI::Queue::AddTest < Minitest::Test
 
     assert_equal 0, exit_code
 
-    id = stdout_output.lines.first.strip
+    id = @stdout.lines.first.strip
     item = queue.find(id)
     assert_equal "/path/to/prompt.md", item.metadata["system_prompt"]
   end
@@ -134,7 +134,7 @@ class Sift::CLI::Queue::AddTest < Minitest::Test
 
     assert_equal 0, exit_code
 
-    id = stdout_output.lines.first.strip
+    id = @stdout.lines.first.strip
     item = queue.find(id)
     assert_equal "/path/to/prompt.md", item.metadata["system_prompt"]
     assert_equal "analyze", item.metadata["workflow"]
