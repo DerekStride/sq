@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "async"
 require "cli/ui"
 require "io/console"
 require "tempfile"
@@ -12,16 +13,10 @@ module Sift
     end
 
     def run
-      setup_ui
-
-      loop do
-        items = @queue.filter(status: "pending")
-        break if items.empty?
-
-        items.each do |item|
-          result = review_item(item)
-          return if result == :quit
-        end
+      Sync do |task|
+        setup_ui
+        @agent_runner = AgentRunner.new(client: @client, task: task)
+        main_loop
       end
     end
 
@@ -30,6 +25,28 @@ module Sift
     def setup_ui
       ::CLI::UI::StdoutRouter.enable
       ::CLI::UI.frame_style = :box
+    end
+
+    def main_loop
+      loop do
+        process_completed_agents
+
+        items = @queue.filter(status: "pending")
+        eligible = items.reject { |item| @agent_runner.running?(item.id) }
+
+        break if eligible.empty? && @agent_runner.running_count == 0
+
+        if eligible.empty?
+          display_waiting_status
+          sleep 1
+          next
+        end
+
+        eligible.each do |item|
+          result = review_item(item)
+          return if result == :quit
+        end
+      end
     end
 
     def review_item(item)
@@ -47,6 +64,7 @@ module Sift
           handle_close(item)
           return :next
         when :quit
+          @agent_runner.stop_all
           return :quit
         end
       end
@@ -68,6 +86,9 @@ module Sift
 
     def prompt_action(item)
       puts
+      status = status_line
+      puts ::CLI::UI.fmt(status) if status
+
       parts = [
         "[{{cyan:v}}]iew",
         "[{{blue:a}}]gent",
@@ -79,6 +100,9 @@ module Sift
       print ::CLI::UI.fmt("{{bold:Choice:}} ")
 
       loop do
+        # Note: read_char blocks the current fiber; agent fibers won't
+        # progress while waiting for input. Acceptable for now — revisit
+        # with IO#wait_readable if needed.
         char = ::CLI::UI::Prompt.read_char
         case char.downcase
         when "v"
@@ -97,6 +121,19 @@ module Sift
       end
     end
 
+    def status_line
+      pending = @queue.count(status: "pending")
+      running = @agent_runner.running_count
+      return nil if running == 0
+
+      "{{gray:[#{pending} pending | #{running} running]}}"
+    end
+
+    def display_waiting_status
+      running = @agent_runner.running_count
+      puts ::CLI::UI.fmt("\n{{gray:Waiting for #{running} agent#{"s" if running != 1}...}}")
+    end
+
     def handle_view(item)
       editor = Editor.new(sources: item.sources, item_id: item.id)
       editor.open
@@ -104,29 +141,36 @@ module Sift
 
     def handle_agent(item)
       print ::CLI::UI.fmt("{{bold:Prompt}} {{gray:(Ctrl-G for editor):}} ")
+      # Note: getch blocks the current fiber; same caveat as read_char.
       user_prompt = read_agent_prompt
       return if user_prompt.nil? || user_prompt.strip.empty?
 
       prompt_text = build_agent_prompt(item, user_prompt)
+      @agent_runner.spawn(item.id, prompt_text, user_prompt, session_id: item.session_id)
+      puts ::CLI::UI.fmt("{{blue:Agent started in background}}")
+    end
 
-      result = nil
-      ::CLI::UI::Spinner.spin("Asking Claude...") do |spinner|
-        result = @client.prompt(prompt_text, session_id: item.session_id)
-        spinner.update_title("Done")
+    def process_completed_agents
+      completed = @agent_runner.poll
+      completed.each do |item_id, data|
+        result = data[:result]
+        user_prompt = data[:prompt]
+
+        if result
+          transcript_source = Queue::Source.new(
+            type: "transcript",
+            content: "User: #{user_prompt}\n\nAssistant: #{result.response}",
+          )
+          item = @queue.find(item_id)
+          next unless item
+
+          updated_sources = item.sources + [transcript_source]
+          @queue.update(item_id, sources: updated_sources, session_id: result.session_id)
+          puts ::CLI::UI.fmt("\n{{blue:Agent finished for item #{item_id}}}")
+        else
+          puts ::CLI::UI.fmt("\n{{red:Agent failed for item #{item_id}}}")
+        end
       end
-
-      puts
-      ::CLI::UI::Frame.open("{{bold:Agent}}", color: :magenta) do
-        puts result.response
-      end
-
-      # Append transcript source and persist session
-      transcript_source = Queue::Source.new(
-        type: "transcript",
-        content: "User: #{user_prompt}\n\nAssistant: #{result.response}",
-      )
-      updated_sources = item.sources + [transcript_source]
-      @queue.update(item.id, sources: updated_sources, session_id: result.session_id)
     end
 
     def handle_close(item)

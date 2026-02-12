@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "tmpdir"
+require "async"
 
 class Sift::ReviewLoopTest < Minitest::Test
   include TestHelpers
@@ -147,6 +148,29 @@ class Sift::ReviewLoopTest < Minitest::Test
     assert_includes output, "c.rb"
     assert_includes output, "text"
     assert_includes output, "[inline]"
+  end
+
+  # --- process_completed_agents tests ---
+
+  def test_process_completed_agents_appends_transcript
+    item = @queue.push(sources: [{ type: "text", content: "original" }])
+    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+      rl.instance_variable_set(:@agent_runner, runner)
+
+      runner.spawn(item.id, "prompt text", "user question")
+      task.yield
+
+      capture_cli_ui_output { rl.send(:process_completed_agents) }
+
+      updated = @queue.find(item.id)
+      assert_equal 2, updated.sources.size
+      assert_equal "transcript", updated.sources.last.type
+      assert_includes updated.sources.last.content, "user question"
+      assert updated.session_id
+    end
   end
 
   private

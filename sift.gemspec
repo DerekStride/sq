@@ -24,6 +24,7 @@ Gem::Specification.new do |spec|
   spec.executables = ["sift"]
   spec.require_paths = ["lib"]
 
+  spec.add_dependency "async", "~> 2.0"
   spec.add_dependency "cli-ui", "~> 2.0"
   spec.add_dependency "logger"
   spec.add_dependency "reline"
