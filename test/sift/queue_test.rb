@@ -408,4 +408,188 @@ class Sift::QueueTest < Minitest::Test
 
     assert File.exist?(nested_path)
   end
+
+  # --- Corrupt line recovery tests ---
+
+  def test_all_skips_corrupt_line_in_middle
+    with_log_level("FATAL") do
+      item1 = @queue.push(sources: [{ type: "text", content: "first" }])
+      # Inject a corrupt line between valid items
+      File.open(@queue_path, "a") { |f| f.puts("not valid json{{{") }
+      item3 = @queue.push(sources: [{ type: "text", content: "third" }])
+
+      items = @queue.all
+      assert_equal 2, items.length
+      assert_equal item1.id, items[0].id
+      assert_equal item3.id, items[1].id
+    end
+  end
+
+  def test_all_skips_corrupt_trailing_line
+    with_log_level("FATAL") do
+      item1 = @queue.push(sources: [{ type: "text", content: "valid" }])
+      File.open(@queue_path, "a") { |f| f.print('{"id":"x","status":"pending"') } # truncated JSON
+
+      items = @queue.all
+      assert_equal 1, items.length
+      assert_equal item1.id, items[0].id
+    end
+  end
+
+  def test_all_logs_warning_for_corrupt_lines
+    @queue.push(sources: [{ type: "text", content: "valid" }])
+    File.open(@queue_path, "a") { |f| f.puts("corrupt line") }
+
+    with_log_level("WARN") do
+      output = capture_io { @queue.all }
+      assert_match(/corrupt line 2/i, output[1])
+    end
+  end
+
+  def test_all_recovers_all_valid_lines_from_mixed_file
+    with_log_level("FATAL") do
+      # Build a file with valid, corrupt, valid, blank, corrupt, valid
+      lines = [
+        '{"id":"aaa","status":"pending","sources":[{"type":"text","content":"one"}],"metadata":{},"created_at":"2025-01-01","updated_at":"2025-01-01"}',
+        "bad json 1",
+        '{"id":"bbb","status":"pending","sources":[{"type":"text","content":"two"}],"metadata":{},"created_at":"2025-01-01","updated_at":"2025-01-01"}',
+        "",
+        "{truncated",
+        '{"id":"ccc","status":"pending","sources":[{"type":"text","content":"three"}],"metadata":{},"created_at":"2025-01-01","updated_at":"2025-01-01"}',
+      ]
+      File.write(@queue_path, lines.join("\n") + "\n")
+
+      items = @queue.all
+      assert_equal 3, items.length
+      assert_equal %w[aaa bbb ccc], items.map(&:id)
+    end
+  end
+
+  # --- File locking tests ---
+
+  def test_concurrent_pushes_produce_unique_ids
+    # Fork multiple processes that push concurrently
+    num_processes = 5
+    items_per_process = 10
+
+    pids = num_processes.times.map do
+      fork do
+        queue = Sift::Queue.new(@queue_path)
+        items_per_process.times do
+          queue.push(sources: [{ type: "text", content: "from pid #{Process.pid}" }])
+        end
+      end
+    end
+
+    pids.each { |pid| Process.waitpid(pid) }
+
+    items = @queue.all
+    assert_equal num_processes * items_per_process, items.length,
+      "Expected #{num_processes * items_per_process} items, got #{items.length}"
+    assert_equal items.length, items.map(&:id).uniq.length,
+      "All IDs should be unique"
+  end
+
+  def test_concurrent_push_and_update_no_data_loss
+    # Pre-populate with items to update
+    initial_items = 5.times.map do
+      @queue.push(sources: [{ type: "text", content: "initial" }])
+    end
+
+    pids = []
+
+    # Process 1: push new items
+    pids << fork do
+      queue = Sift::Queue.new(@queue_path)
+      10.times do
+        queue.push(sources: [{ type: "text", content: "new" }])
+      end
+    end
+
+    # Process 2: update existing items
+    pids << fork do
+      queue = Sift::Queue.new(@queue_path)
+      initial_items.each do |item|
+        queue.update(item.id, status: "closed")
+      end
+    end
+
+    pids.each { |pid| Process.waitpid(pid) }
+
+    items = @queue.all
+    assert_equal 15, items.length, "Should have 5 initial + 10 new items"
+
+    closed = items.select(&:closed?)
+    assert_equal 5, closed.length, "All initial items should be closed"
+  end
+
+  def test_concurrent_push_and_remove_consistency
+    # Pre-populate
+    to_remove = @queue.push(sources: [{ type: "text", content: "remove me" }])
+
+    pids = []
+
+    # Process 1: push items
+    pids << fork do
+      queue = Sift::Queue.new(@queue_path)
+      10.times do
+        queue.push(sources: [{ type: "text", content: "keep" }])
+      end
+    end
+
+    # Process 2: remove the item
+    pids << fork do
+      queue = Sift::Queue.new(@queue_path)
+      queue.remove(to_remove.id)
+    end
+
+    pids.each { |pid| Process.waitpid(pid) }
+
+    items = @queue.all
+    assert_equal 10, items.length, "Should have exactly 10 items (removed one)"
+    assert_nil @queue.find(to_remove.id), "Removed item should be gone"
+  end
+
+  def test_shared_lock_allows_concurrent_reads
+    @queue.push(sources: [{ type: "text", content: "test" }])
+
+    # Two readers should not block each other
+    r1, w1 = IO.pipe
+    r2, w2 = IO.pipe
+
+    pid1 = fork do
+      r1.close
+      r2.close
+      queue = Sift::Queue.new(@queue_path)
+      items = queue.all
+      w1.puts items.length
+      w1.close
+      w2.close
+    end
+
+    pid2 = fork do
+      r1.close
+      r2.close
+      queue = Sift::Queue.new(@queue_path)
+      items = queue.all
+      w2.puts items.length
+      w1.close
+      w2.close
+    end
+
+    w1.close
+    w2.close
+
+    # Both should complete without deadlock (timeout protects against hangs)
+    result1 = r1.gets
+    result2 = r2.gets
+    r1.close
+    r2.close
+
+    Process.waitpid(pid1)
+    Process.waitpid(pid2)
+
+    assert_equal "1", result1&.strip
+    assert_equal "1", result2&.strip
+  end
 end
