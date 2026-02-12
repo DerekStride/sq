@@ -12,17 +12,20 @@ module Sift
       @client = client
       @task = task
       @semaphore = Async::Semaphore.new(limit, parent: task)
-      @agents = {} # item_id -> { task:, prompt: }
+      @agents = {} # item_id -> { task:, prompt:, started_at: }
     end
 
     # Spawn a background agent for the given item.
     # Returns immediately — the agent runs as a child fiber.
     def spawn(item_id, prompt_text, user_prompt, session_id: nil)
+      Log.debug "agent spawn item=#{item_id} session=#{session_id || "new"} prompt=#{user_prompt.lines.first&.chomp}"
+
       agent_task = @semaphore.async do
+        Log.debug "agent running item=#{item_id}"
         @client.prompt(prompt_text, session_id: session_id)
       end
 
-      @agents[item_id] = { task: agent_task, prompt: user_prompt }
+      @agents[item_id] = { task: agent_task, prompt: user_prompt, started_at: Time.now }
     end
 
     # Check for completed agents. Returns a hash of completed results:
@@ -33,10 +36,15 @@ module Sift
 
       @agents.each do |item_id, agent|
         task = agent[:task]
+        elapsed = (Time.now - agent[:started_at]).round(1)
         if task.completed?
+          Log.debug "agent completed item=#{item_id} elapsed=#{elapsed}s"
           completed[item_id] = { result: task.result, prompt: agent[:prompt] }
         elsif task.failed?
+          Log.debug "agent failed item=#{item_id} elapsed=#{elapsed}s"
           completed[item_id] = { result: nil, prompt: agent[:prompt] }
+        else
+          Log.debug "agent still running item=#{item_id} elapsed=#{elapsed}s"
         end
       end
 
@@ -56,6 +64,7 @@ module Sift
 
     # Stop all running agents.
     def stop_all
+      Log.debug "agent stop_all count=#{@agents.size}"
       @agents.each_value { |a| a[:task].stop }
       @agents.clear
     end

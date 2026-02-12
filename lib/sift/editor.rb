@@ -41,7 +41,19 @@ module Sift
     end
 
     def collect_paths
-      @sources.flat_map { |source| paths_for_source(source) }
+      transcripts = @sources.select { |s| s.type == "transcript" }
+      others = @sources.reject { |s| s.type == "transcript" }
+
+      paths = others.flat_map { |source| paths_for_source(source) }
+
+      if transcripts.any?
+        combined = transcripts.map.with_index(1) do |source, i|
+          "## Turn #{i}\n\n#{source.content || ""}"
+        end.join("\n\n---\n\n")
+        paths << write_temp(combined, "transcript", ".md")
+      end
+
+      paths.uniq
     end
 
     private
@@ -58,9 +70,6 @@ module Sift
         paths << source.path if source.path && ::File.exist?(source.path)
       when "text"
         paths << write_temp(source.content || "", @item_id, ".md")
-      when "transcript"
-        basename = source.path ? ::File.basename(source.path) : @item_id
-        paths << write_temp(source.content || "", basename, ".md")
       end
 
       paths

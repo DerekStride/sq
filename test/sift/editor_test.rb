@@ -154,17 +154,24 @@ class Sift::EditorTest < Minitest::Test
 
     assert_equal 1, paths.length
     assert paths[0].end_with?(".md")
-    assert_includes paths[0], "sift-abc"
-    assert_equal "H: Hello\nA: Hi", File.read(paths[0])
+    assert_includes paths[0], "sift-abc-transcript"
+    assert_includes File.read(paths[0]), "H: Hello\nA: Hi"
   end
 
-  def test_collect_paths_transcript_source_with_path
-    source = Sift::Queue::Source.new(type: "transcript", path: "chat.md", content: "H: Hello")
-    editor = Sift::Editor.new(sources: [source], item_id: "abc")
+  def test_collect_paths_multiple_transcripts_combined
+    sources = [
+      Sift::Queue::Source.new(type: "transcript", content: "H: Hello\nA: Hi"),
+      Sift::Queue::Source.new(type: "transcript", content: "H: Follow up\nA: Sure"),
+    ]
+    editor = Sift::Editor.new(sources: sources, item_id: "abc")
     paths = editor.collect_paths
 
     assert_equal 1, paths.length
-    assert_includes paths[0], "sift-abc-chat.md"
+    content = File.read(paths[0])
+    assert_includes content, "## Turn 1"
+    assert_includes content, "H: Hello"
+    assert_includes content, "## Turn 2"
+    assert_includes content, "H: Follow up"
   end
 
   def test_temp_file_naming

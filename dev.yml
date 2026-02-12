@@ -12,6 +12,7 @@ commands:
   sift: bundle exec exe/sift $@
   sq: bundle exec exe/sq $@
   test: bundle exec rake test
+  debug: SIFT_LOG_LEVEL=debug bundle exec exe/sift $@
 
 check:
   test: bundle exec rake test

@@ -18,12 +18,18 @@ module Sift
     # Returns Result with response text and session_id
     def prompt(text, session_id: nil)
       args = build_args(session_id:)
+      Log.debug "client start cmd=#{args.join(" ")}"
+      start = Time.now
+
       stdout, stderr, status = Open3.capture3(*args, stdin_data: text)
+      elapsed = (Time.now - start).round(1)
 
       unless status.success?
+        Log.error "client failed elapsed=#{elapsed}s stderr=#{stderr.lines.first&.chomp}"
         raise Error, "Claude CLI failed: #{stderr}"
       end
 
+      Log.debug "client done elapsed=#{elapsed}s bytes=#{stdout.bytesize}"
       parse_response(stdout)
     end
 

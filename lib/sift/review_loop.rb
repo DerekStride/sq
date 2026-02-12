@@ -52,6 +52,7 @@ module Sift
 
     def review_item(item)
       loop do
+        process_completed_agents
         display_card(item)
         action = prompt_action(item)
 
