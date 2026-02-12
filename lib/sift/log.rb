@@ -86,6 +86,13 @@ module Sift
       def create_logger
         ::Logger.new($stderr, progname: "sift").tap do |l|
           l.level = LOG_LEVELS.fetch(log_level)
+          l.formatter = proc { |severity, _time, _progname, msg|
+            case severity
+            when "ERROR", "FATAL" then "Error: #{msg}\n"
+            when "WARN" then "Warning: #{msg}\n"
+            else "#{msg}\n"
+            end
+          }
         end
       end
 

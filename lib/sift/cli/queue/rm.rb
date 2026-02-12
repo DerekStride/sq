@@ -11,17 +11,17 @@ module Sift
         def execute
           id = argv.shift
           unless id
-            stderr.puts "Error: Item ID is required"
+            logger.error("Item ID is required")
             return 1
           end
 
           removed = queue.remove(id)
           if removed
-            stdout.puts removed.id
-            Sift::Log.info "Removed item #{removed.id}"
+            puts removed.id
+            logger.info("Removed item #{removed.id}")
             0
           else
-            stderr.puts "Error: Item not found: #{id}"
+            logger.error("Item not found: #{id}")
             1
           end
         end

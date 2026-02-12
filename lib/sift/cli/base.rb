@@ -35,15 +35,12 @@ module Sift
         end
       end
 
-      attr_reader :argv, :options, :stdin, :stdout, :stderr, :parent
+      attr_reader :argv, :options, :parent
 
-      def initialize(argv, parent: nil, stdin: $stdin, stdout: $stdout, stderr: $stderr)
+      def initialize(argv, parent: nil)
         @argv = argv.dup
         @parent = parent
         @options = {}
-        @stdin = stdin
-        @stdout = stdout
-        @stderr = stderr
       end
 
       def run
@@ -53,10 +50,10 @@ module Sift
           run_leaf
         end
       rescue OptionParser::ParseError => e
-        stderr.puts "Error: #{e.message}"
+        logger.error(e.message)
         1
       rescue Sift::Queue::Error => e
-        stderr.puts "Error: #{e.message}"
+        logger.error(e.message)
         1
       end
 
@@ -66,6 +63,8 @@ module Sift
           parser.separator ""
           parser.separator "INHERITED FLAGS"
           @parent.define_flags(parser, options)
+        else
+          parser.on("-v", "--verbose", "Increase verbosity (repeatable)") { Sift::Log.logger.level -= 1 }
         end
       end
 
@@ -85,6 +84,10 @@ module Sift
         parts.join(" ")
       end
 
+      def logger
+        Sift::Log.logger
+      end
+
       private
 
       def subcommands?
@@ -94,14 +97,13 @@ module Sift
       def route_subcommand
         klass = find_subcommand
         if klass
-          klass.new(@argv, parent: self, stdin: stdin, stdout: stdout, stderr: stderr).run
+          klass.new(@argv, parent: self).run
         elsif @argv.empty? || @argv.intersect?(%w[-h --help])
-          stdout.puts help_text
+          puts help_text
           0
         else
-          stderr.puts "Unknown command: #{@argv.first}"
-          stderr.puts
-          stdout.puts help_text
+          logger.error("Unknown command: #{@argv.first}")
+          puts help_text
           1
         end
       end
@@ -125,7 +127,7 @@ module Sift
         parser.parse!(@argv)
 
         if help_requested
-          stdout.puts help_text
+          puts help_text
           return 0
         end
 

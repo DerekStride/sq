@@ -53,13 +53,13 @@ module Sift
         def execute
           id = argv.shift
           unless id
-            stderr.puts "Error: Item ID is required"
+            logger.error("Item ID is required")
             return 1
           end
 
           item = queue.find(id)
           unless item
-            stderr.puts "Error: Item not found: #{id}"
+            logger.error("Item not found: #{id}")
             return 1
           end
 
@@ -80,14 +80,14 @@ module Sift
               if index >= 0 && index < sources.length
                 sources.delete_at(index)
               else
-                stderr.puts "Warning: Source index #{index} out of range"
+                logger.warn("Source index #{index} out of range")
               end
             end
 
             sources.concat(options[:add_sources])
 
             if sources.empty?
-              stderr.puts "Error: Cannot remove all sources"
+              logger.error("Cannot remove all sources")
               return 1
             end
 
@@ -95,13 +95,13 @@ module Sift
           end
 
           if attrs.empty?
-            stderr.puts "Error: No changes specified"
+            logger.error("No changes specified")
             return 1
           end
 
           updated = queue.update(id, **attrs)
-          stdout.puts updated.id
-          Sift::Log.info "Updated item #{updated.id}"
+          puts updated.id
+          logger.info("Updated item #{updated.id}")
           0
         end
 

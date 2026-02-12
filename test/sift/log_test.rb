@@ -13,9 +13,11 @@ class Sift::LogTest < Minitest::Test
   end
 
   def test_logs_to_stderr_by_default
-    _, stderr = capture_io { Sift::Log.info("hello from sift") }
+    with_log_level("INFO") do
+      _, stderr = capture_io { Sift::Log.info("hello from sift") }
 
-    assert_includes stderr, "hello from sift"
+      assert_includes stderr, "hello from sift"
+    end
   end
 
   def test_allows_custom_logger
@@ -33,10 +35,12 @@ class Sift::LogTest < Minitest::Test
 
     Sift::Log.reset!
 
-    _, stderr = capture_io { Sift::Log.info("after reset") }
+    with_log_level("INFO") do
+      _, stderr = capture_io { Sift::Log.info("after reset") }
 
-    refute_includes custom_output.string, "after reset"
-    assert_includes stderr, "after reset"
+      refute_includes custom_output.string, "after reset"
+      assert_includes stderr, "after reset"
+    end
   end
 
   def test_respects_log_level

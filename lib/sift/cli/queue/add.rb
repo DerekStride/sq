@@ -52,13 +52,13 @@ module Sift
 
         def execute
           if options[:stdin_type]
-            content = stdin.read
+            content = $stdin.read
             options[:sources] << { type: options[:stdin_type], content: content }
           end
 
           if options[:sources].empty?
-            stderr.puts "Error: At least one source is required"
-            stderr.puts "Use --diff, --file, --text, --transcript, or --stdin"
+            logger.error("At least one source is required")
+            logger.error("Use --diff, --file, --text, --transcript, or --stdin")
             return 1
           end
 
@@ -66,8 +66,8 @@ module Sift
           metadata["system_prompt"] = options[:system_prompt] if options[:system_prompt]
 
           item = queue.push(sources: options[:sources], metadata: metadata)
-          stdout.puts item.id
-          Sift::Log.info "Added item #{item.id} with #{item.sources.length} source(s)"
+          puts item.id
+          logger.info("Added item #{item.id} with #{item.sources.length} source(s)")
           0
         end
 

@@ -26,8 +26,8 @@ module Sift
       register_subcommand Queue::Edit, category: :additional
       register_subcommand Queue::Rm, category: :additional
 
-      def initialize(argv, parent: nil, queue_path: nil, **kwargs)
-        super(argv, parent: parent, **kwargs)
+      def initialize(argv, parent: nil, queue_path: nil)
+        super(argv, parent: parent)
         @default_queue_path = queue_path
       end
 

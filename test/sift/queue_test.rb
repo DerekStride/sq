@@ -102,6 +102,27 @@ class Sift::QueueTest < Minitest::Test
     assert_equal({ "foo" => "bar" }, item.metadata)
   end
 
+  def test_item_errors_default_to_empty_array
+    item = Sift::Queue::Item.from_h({ "id" => "abc", "status" => "pending", "sources" => [] })
+    assert_equal [], item.errors
+  end
+
+  def test_item_errors_roundtrip_through_queue
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    errors = [{ "message" => "session not found", "prompt" => "fix it", "timestamp" => "2025-01-01T00:00:00Z" }]
+    @queue.update(item.id, errors: errors)
+
+    reloaded = @queue.find(item.id)
+    assert_equal 1, reloaded.errors.size
+    assert_equal "session not found", reloaded.errors.first["message"]
+  end
+
+  def test_item_to_h_omits_errors_when_empty
+    source = Sift::Queue::Source.new(type: "text", content: "test")
+    item = Sift::Queue::Item.new(id: "abc", status: "pending", sources: [source], errors: [])
+    refute item.to_h.key?(:errors)
+  end
+
   def test_item_status_predicates
     item = Sift::Queue::Item.new(id: "1", status: "pending", sources: [])
     assert item.pending?

@@ -21,18 +21,19 @@ module QueueTestHelper
   end
 
   def run_command(args, stdin_content: nil)
-    stdin = stdin_content ? StringIO.new(stdin_content) : StringIO.new
     exit_code = nil
     @stdout, @stderr = capture_io do
-      Sift::Log.reset!
-      cmd = Sift::CLI::QueueCommand.new(
-        args,
-        queue_path: @queue_path,
-        stdin: stdin,
-      )
-      exit_code = cmd.run
+      with_log_level("INFO") do
+        if stdin_content
+          old_stdin = $stdin
+          $stdin = StringIO.new(stdin_content)
+        end
+        cmd = Sift::CLI::QueueCommand.new(args, queue_path: @queue_path)
+        exit_code = cmd.run
+      ensure
+        $stdin = old_stdin if stdin_content
+      end
     end
-    Sift::Log.reset!
     exit_code
   end
 

@@ -8,9 +8,11 @@ require_relative "statusline"
 
 module Sift
   class ReviewLoop
-    def initialize(queue:, model: "sonnet", dry: false, concurrency: 5)
+    AGENT_DOCS_DIR = File.expand_path("../../../agent-docs", __FILE__)
+
+    def initialize(queue:, model: "sonnet", dry: false, concurrency: 5, system_prompt: nil)
       @queue = queue
-      @client = dry ? DryClient.new(model: model) : Client.new(model: model)
+      @client = dry ? DryClient.new(model: model) : Client.new(model: model, system_prompt: system_prompt)
       @concurrency = concurrency
     end
 
@@ -34,6 +36,8 @@ module Sift
     end
 
     def main_loop
+      index = 0
+
       loop do
         process_completed_agents
 
@@ -43,33 +47,51 @@ module Sift
         break if eligible.empty? && @agent_runner.running_count == 0
 
         if eligible.empty?
-          display_waiting_status
-          wait_for_agents
+          action = wait_with_input
+          return if action == :quit
           next
         end
 
-        eligible.each do |item|
-          result = review_item(item)
-          return if result == :quit
+        index = index.clamp(0, eligible.size - 1)
+        item = eligible[index]
+        result = review_item(item, position: index + 1, total: eligible.size)
+
+        case result
+        when :quit
+          return
+        when :next
+          index += 1
+          index = 0 if index >= eligible.size
+        when :prev
+          index -= 1
+          index = eligible.size - 1 if index < 0
+        when :acted
+          # Item was closed/agent started — stay at same index (next item slides in)
         end
       end
     end
 
-    def review_item(item)
+    def review_item(item, position: nil, total: nil)
       loop do
         process_completed_agents
-        display_card(item)
-        action = prompt_action(item)
+        display_card(item, position: position, total: total)
+        action = prompt_action(item, show_nav: total && total > 1)
 
         case action
         when :view
           handle_view(item)
         when :agent
           handle_agent(item)
-          return :next
+          return :acted
+        when :general
+          handle_general_agent
         when :close
           handle_close(item)
+          return :acted
+        when :next
           return :next
+        when :prev
+          return :prev
         when :quit
           process_completed_agents
           @agent_runner.stop_all
@@ -78,9 +100,11 @@ module Sift
       end
     end
 
-    def display_card(item)
+    def display_card(item, position: nil, total: nil)
       puts
-      ::CLI::UI::Frame.open("{{bold:Item #{item.id}}}", color: :blue) do
+      title = "{{bold:Item #{item.id}}}"
+      title += " {{gray:[#{position}/#{total}]}}" if position && total
+      ::CLI::UI::Frame.open(title, color: :blue) do
         grouped = item.sources.group_by(&:type)
         grouped.each do |type, sources|
           puts ::CLI::UI.fmt("  {{yellow:#{type}}}")
@@ -92,46 +116,57 @@ module Sift
       end
     end
 
-    def prompt_action(item)
+    def prompt_action(item, show_nav: false)
       puts
 
       parts = [
         "[{{cyan:v}}]iew",
         "[{{blue:a}}]gent",
         "[{{green:c}}]lose",
-        "[{{gray:q}}]uit",
+        "[{{magenta:g}}]eneral",
       ]
+      parts << "[{{yellow:n}}]ext  [{{yellow:p}}]rev" if show_nav
+      parts << "[{{gray:q}}]uit"
 
       puts ::CLI::UI.fmt("{{bold:Actions:}} #{parts.join("  ")}")
       print ::CLI::UI.fmt("{{bold:Choice:}} ")
 
-      read_action_char
+      read_action_char(show_nav: show_nav)
     end
 
     # Non-blocking input loop. Ticks the statusline spinner every 100ms
     # while waiting for a keypress. Does NOT call process_completed_agents —
     # that happens when the user takes an action and the main flow resumes.
     # Suppresses debug/info logs so $stderr doesn't corrupt the prompt.
-    def read_action_char
+    def read_action_char(show_nav: false)
       Log.quiet do
-        $stdin.raw do |io|
-          loop do
-            if io.wait_readable(0.1)
-              char = io.getc
-              next unless char
-              action = resolve_action(char.downcase)
-              return action if action
-            else
-              if @statusline&.tick
-                refresh_statusline
-              end
-            end
-          end
+        loop do
+          char = read_char
+          next unless char
+          action = resolve_action(char.downcase, show_nav: show_nav)
+          return action if action
         end
       end
     end
 
-    def resolve_action(char)
+    # Read a single character, ticking the statusline while waiting.
+    # Returns nil on timeout (no input within 100ms tick interval).
+    def read_char
+      if $stdin.tty?
+        $stdin.raw do |io|
+          if io.wait_readable(0.1)
+            io.getc
+          else
+            @statusline&.tick && refresh_statusline
+            nil
+          end
+        end
+      else
+        ::CLI::UI::Prompt.read_char
+      end
+    end
+
+    def resolve_action(char, show_nav: false)
       case char
       when "v"
         puts "view"
@@ -142,6 +177,17 @@ module Sift
       when "c"
         puts ::CLI::UI.fmt("{{green:closed}}")
         :close
+      when "g"
+        puts "general"
+        :general
+      when "n"
+        return nil unless show_nav
+        puts "next"
+        :next
+      when "p"
+        return nil unless show_nav
+        puts "prev"
+        :prev
       when "q"
         puts "quit"
         :quit
@@ -162,9 +208,25 @@ module Sift
       @statusline.update("{{gray:#{parts.join(" | ")}}}")
     end
 
-    def display_waiting_status
+    def wait_with_input
       running = @agent_runner.running_count
       puts ::CLI::UI.fmt("\n{{gray:Waiting for #{running} agent#{"s" if running != 1}...}}")
+      puts ::CLI::UI.fmt("{{bold:Actions:}} [{{magenta:g}}]eneral  [{{gray:q}}]uit")
+      print ::CLI::UI.fmt("{{bold:Choice:}} ")
+
+      ready = IO.select([$stdin], nil, nil, 1)
+      return nil unless ready
+
+      char = $stdin.getch
+      case char.downcase
+      when "g"
+        puts "general"
+        handle_general_agent
+        nil
+      when "q"
+        puts "quit"
+        :quit
+      end
     end
 
     # Tick the statusline while waiting for agents to finish.
@@ -183,6 +245,24 @@ module Sift
       editor.open
     end
 
+    def handle_general_agent
+      print ::CLI::UI.fmt("{{bold:Prompt}} {{gray:(Ctrl-G for editor):}} ")
+      user_prompt = read_agent_prompt
+      return if user_prompt.nil? || user_prompt.strip.empty?
+
+      @agent_runner.spawn_general(user_prompt, user_prompt, system_prompt: general_agent_system_prompt)
+      puts ::CLI::UI.fmt("{{magenta:General agent started in background}}")
+    end
+
+    def general_agent_system_prompt
+      path = File.join(AGENT_DOCS_DIR, "general.md")
+      template = File.read(path)
+      template.gsub("{{queue_path}}", @queue.path)
+    rescue Errno::ENOENT
+      Log.warn "agent doc not found: #{path}"
+      nil
+    end
+
     def handle_agent(item)
       print ::CLI::UI.fmt("{{bold:Prompt}} {{gray:(Ctrl-G for editor):}} ")
       # Note: getch blocks the current fiber; same caveat as read_char.
@@ -190,7 +270,9 @@ module Sift
       return if user_prompt.nil? || user_prompt.strip.empty?
 
       prompt_text = build_agent_prompt(item, user_prompt)
-      @agent_runner.spawn(item.id, prompt_text, user_prompt, session_id: item.session_id)
+      system_prompt = resolve_system_prompt(item)
+      @agent_runner.spawn(item.id, prompt_text, user_prompt,
+        session_id: item.session_id, system_prompt: system_prompt)
       refresh_statusline
       puts ::CLI::UI.fmt("{{blue:Agent started in background}}")
     end
@@ -199,26 +281,66 @@ module Sift
       completed = @agent_runner.poll
       refresh_statusline unless completed.empty?
       completed.each do |item_id, data|
-        result = data[:result]
-        user_prompt = data[:prompt]
-
-        if result
-          content = SessionTranscript.render(result.session_id) ||
-            "User: #{user_prompt}\n\nAssistant: #{result.response}"
-
-          transcript_source = Queue::Source.new(
-            type: "transcript",
-            content: content,
-          )
-          item = @queue.find(item_id)
-          next unless item
-
-          updated_sources = item.sources + [transcript_source]
-          @queue.update(item_id, sources: updated_sources, session_id: result.session_id)
-          puts ::CLI::UI.fmt("\n{{blue:Agent finished for item #{item_id}}}")
+        if data[:general]
+          process_completed_general_agent(item_id, data)
         else
-          puts ::CLI::UI.fmt("\n{{red:Agent failed for item #{item_id}}}")
+          process_completed_item_agent(item_id, data)
         end
+      end
+    end
+
+    def process_completed_item_agent(item_id, data)
+      result = data[:result]
+      error = data[:error]
+      user_prompt = data[:prompt]
+
+      if result
+        content = SessionTranscript.render(result.session_id) ||
+          "User: #{user_prompt}\n\nAssistant: #{result.response}"
+
+        transcript_source = Queue::Source.new(
+          type: "transcript",
+          content: content,
+        )
+        item = @queue.find(item_id)
+        return unless item
+
+        updated_sources = item.sources + [transcript_source]
+        @queue.update(item_id, sources: updated_sources, session_id: result.session_id)
+        puts ::CLI::UI.fmt("\n{{blue:Agent finished for item #{item_id}}}")
+      else
+        item = @queue.find(item_id)
+        if item
+          error_entry = {
+            "message" => error || "Unknown error",
+            "prompt" => user_prompt,
+            "timestamp" => Time.now.utc.iso8601,
+          }
+          errors = (item.errors || []) + [error_entry]
+          @queue.update(item_id, errors: errors)
+        end
+        Log.warn "agent failed item=#{item_id}: #{error}"
+        puts ::CLI::UI.fmt("\n{{red:Agent failed for item #{item_id}: #{error}}}")
+      end
+    end
+
+    def process_completed_general_agent(key, data)
+      result = data[:result]
+      error = data[:error]
+      user_prompt = data[:prompt]
+
+      if result
+        content = SessionTranscript.render(result.session_id) ||
+          "User: #{user_prompt}\n\nAssistant: #{result.response}"
+
+        transcript_source = { type: "transcript", content: content }
+        metadata = { "source" => "general_agent", "prompt" => user_prompt }
+
+        @queue.push(sources: [transcript_source], metadata: metadata, session_id: result.session_id)
+        puts ::CLI::UI.fmt("\n{{magenta:General agent finished — new item added to queue}}")
+      else
+        Log.warn "general agent failed key=#{key}: #{error}"
+        puts ::CLI::UI.fmt("\n{{red:General agent failed: #{error}}}")
       end
     end
 
@@ -298,6 +420,18 @@ module Sift
       end
       parts << user_prompt
       parts.join("\n")
+    end
+
+    # Resolve the system prompt for an item.
+    # Per-item system_prompt (from metadata) overrides the session default.
+    def resolve_system_prompt(item)
+      path = item.metadata&.dig("system_prompt")
+      return nil unless path
+
+      File.read(path)
+    rescue Errno::ENOENT
+      Log.warn "system prompt file not found: #{path}"
+      nil
     end
   end
 end

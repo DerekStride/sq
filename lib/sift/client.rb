@@ -10,14 +10,16 @@ module Sift
 
     Result = Struct.new(:response, :session_id, :raw, keyword_init: true)
 
-    def initialize(model: nil)
+    def initialize(model: nil, system_prompt: nil)
       @model = model
+      @system_prompt = system_prompt
     end
 
-    # Send a prompt to Claude, optionally resuming a session
+    # Send a prompt to Claude, optionally resuming a session.
+    # system_prompt overrides the instance default when provided.
     # Returns Result with response text and session_id
-    def prompt(text, session_id: nil)
-      args = build_args(session_id:)
+    def prompt(text, session_id: nil, system_prompt: nil)
+      args = build_args(session_id:, system_prompt:)
       Log.debug "client start cmd=#{args.join(" ")}"
       start = Time.now
 
@@ -41,9 +43,11 @@ module Sift
 
     private
 
-    def build_args(session_id: nil)
+    def build_args(session_id: nil, system_prompt: nil)
+      effective_prompt = system_prompt || @system_prompt
       args = ["claude", "-p", "--output-format", "json"]
       args += ["--model", @model] if @model
+      args += ["--system-prompt", effective_prompt] if effective_prompt
       args += ["--resume", session_id] if session_id
       args
     end
@@ -81,7 +85,7 @@ module Sift
       @model = model
     end
 
-    def prompt(text, session_id: nil)
+    def prompt(text, session_id: nil, system_prompt: nil)
       Sift::Log.debug "[dry] model=#{@model || "default"} session=#{session_id || "new"}"
       Sift::Log.debug "[dry] prompt: #{text.lines.first&.chomp}"
       Client::Result.new(

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "stringio"
 
 # Stub commands for testing the Base class
 module StubCommands
@@ -9,7 +8,7 @@ module StubCommands
     command_name "greet"
     summary "Say hello"
     description "Greet someone by name"
-    examples "testcli greet --name World", "testcli greet --name World --verbose"
+    examples "testcli greet --name World", "testcli greet --name World --shout"
 
     def define_flags(parser, options)
       parser.on("--name NAME", "Name to greet") { |v| options[:name] = v }
@@ -21,8 +20,9 @@ module StubCommands
     end
 
     def execute
-      stdout.puts "Hello, #{options[:name]}!"
-      stdout.puts "(verbose)" if options[:verbose]
+      msg = "Hello, #{options[:name]}!"
+      msg = msg.upcase if options[:shout]
+      puts msg
       0
     end
   end
@@ -32,7 +32,7 @@ module StubCommands
     summary "Say goodbye"
 
     def execute
-      stdout.puts "Goodbye!"
+      puts "Goodbye!"
       0
     end
   end
@@ -45,7 +45,7 @@ module StubCommands
     register_subcommand Extra, category: :additional
 
     def define_flags(parser, options)
-      parser.on("--verbose", "Enable verbose output") { options[:verbose] = true }
+      parser.on("--shout", "Enable shout mode") { options[:shout] = true }
       super
     end
   end
@@ -60,32 +60,31 @@ module StubCommands
     end
 
     def execute
-      stdout.puts "count=#{options[:count]}"
+      puts "count=#{options[:count]}"
       0
     end
   end
 end
 
 class Sift::CLI::BaseTest < Minitest::Test
-  def setup
-    @stdout = StringIO.new
-    @stderr = StringIO.new
+  private def run_root(argv)
+    exit_code = nil
+    @stdout, @stderr = capture_io do
+      with_log_level("ERROR") do
+        exit_code = StubCommands::Root.new(argv).run
+      end
+    end
+    exit_code
   end
 
-  def run_root(argv)
-    StubCommands::Root.new(argv, stdin: StringIO.new, stdout: @stdout, stderr: @stderr).run
-  end
-
-  def run_leaf(argv)
-    StubCommands::Leaf.new(argv, stdin: StringIO.new, stdout: @stdout, stderr: @stderr).run
-  end
-
-  def stdout_output
-    @stdout.string
-  end
-
-  def stderr_output
-    @stderr.string
+  private def run_leaf(argv)
+    exit_code = nil
+    @stdout, @stderr = capture_io do
+      with_log_level("ERROR") do
+        exit_code = StubCommands::Leaf.new(argv).run
+      end
+    end
+    exit_code
   end
 
   # --- Subcommand routing ---
@@ -94,30 +93,28 @@ class Sift::CLI::BaseTest < Minitest::Test
     exit_code = run_root(["greet", "--name", "World"])
 
     assert_equal 0, exit_code
-    assert_equal "Hello, World!\n", stdout_output
+    assert_equal "Hello, World!\n", @stdout
   end
 
   def test_flags_before_subcommand
-    exit_code = run_root(["--verbose", "greet", "--name", "World"])
+    exit_code = run_root(["--shout", "greet", "--name", "World"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "Hello, World!"
-    assert_includes stdout_output, "(verbose)"
+    assert_includes @stdout, "HELLO, WORLD!"
   end
 
   def test_flags_after_subcommand
-    exit_code = run_root(["greet", "--verbose", "--name", "World"])
+    exit_code = run_root(["greet", "--shout", "--name", "World"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "Hello, World!"
-    assert_includes stdout_output, "(verbose)"
+    assert_includes @stdout, "HELLO, WORLD!"
   end
 
   def test_parent_flags_flow_to_child_options
-    exit_code = run_root(["greet", "--name", "X", "--verbose"])
+    exit_code = run_root(["greet", "--name", "X", "--shout"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "(verbose)"
+    assert_includes @stdout, "HELLO, X!"
   end
 
   # --- No args / help ---
@@ -126,28 +123,28 @@ class Sift::CLI::BaseTest < Minitest::Test
     exit_code = run_root([])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "testcli"
-    assert_includes stdout_output, "CORE COMMANDS"
-    assert_includes stdout_output, "greet"
+    assert_includes @stdout, "testcli"
+    assert_includes @stdout, "CORE COMMANDS"
+    assert_includes @stdout, "greet"
   end
 
   def test_help_flag_shows_help
     exit_code = run_root(["--help"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "testcli"
+    assert_includes @stdout, "testcli"
   end
 
   def test_leaf_help_flag
     exit_code = run_root(["greet", "--help"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "FLAGS"
-    assert_includes stdout_output, "--name"
-    assert_includes stdout_output, "INHERITED FLAGS"
-    assert_includes stdout_output, "--verbose"
-    assert_includes stdout_output, "EXAMPLES"
-    assert_includes stdout_output, "testcli greet --name World"
+    assert_includes @stdout, "FLAGS"
+    assert_includes @stdout, "--name"
+    assert_includes @stdout, "INHERITED FLAGS"
+    assert_includes @stdout, "--shout"
+    assert_includes @stdout, "EXAMPLES"
+    assert_includes @stdout, "testcli greet --name World"
   end
 
   # --- Unknown subcommand ---
@@ -156,8 +153,8 @@ class Sift::CLI::BaseTest < Minitest::Test
     exit_code = run_root(["bogus"])
 
     assert_equal 1, exit_code
-    assert_includes stderr_output, "Unknown command: bogus"
-    assert_includes stdout_output, "CORE COMMANDS"
+    assert_includes @stderr, "Unknown command: bogus"
+    assert_includes @stdout, "CORE COMMANDS"
   end
 
   # --- Help structure ---
@@ -166,32 +163,48 @@ class Sift::CLI::BaseTest < Minitest::Test
     exit_code = run_root(["greet", "--help"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "Greet someone by name"
+    assert_includes @stdout, "Greet someone by name"
   end
 
   def test_help_has_usage
     exit_code = run_root(["greet", "--help"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "USAGE"
-    assert_includes stdout_output, "testcli greet [flags]"
+    assert_includes @stdout, "USAGE"
+    assert_includes @stdout, "testcli greet [flags]"
   end
 
   def test_parent_help_has_commands_grouped
     exit_code = run_root([])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "CORE COMMANDS"
-    assert_includes stdout_output, "greet"
-    assert_includes stdout_output, "ADDITIONAL COMMANDS"
-    assert_includes stdout_output, "farewell"
+    assert_includes @stdout, "CORE COMMANDS"
+    assert_includes @stdout, "greet"
+    assert_includes @stdout, "ADDITIONAL COMMANDS"
+    assert_includes @stdout, "farewell"
   end
 
   def test_help_has_learn_more
     exit_code = run_root([])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "LEARN MORE"
+    assert_includes @stdout, "LEARN MORE"
+  end
+
+  # --- Verbose flag ---
+
+  def test_verbose_flag_in_help
+    exit_code = run_root(["--help"])
+
+    assert_equal 0, exit_code
+    assert_includes @stdout, "--verbose"
+  end
+
+  def test_verbose_flag_inherited_by_subcommands
+    exit_code = run_root(["greet", "--help"])
+
+    assert_equal 0, exit_code
+    assert_includes @stdout, "--verbose"
   end
 
   # --- Error handling ---
@@ -200,15 +213,15 @@ class Sift::CLI::BaseTest < Minitest::Test
     exit_code = run_root(["greet", "--nonexistent"])
 
     assert_equal 1, exit_code
-    assert_includes stderr_output, "Error:"
+    assert_includes @stderr, "Error:"
   end
 
   def test_validate_failure_returns_error
     exit_code = run_root(["greet"])
 
     assert_equal 1, exit_code
-    assert_includes stderr_output, "Error:"
-    assert_includes stderr_output, "--name is required"
+    assert_includes @stderr, "Error:"
+    assert_includes @stderr, "--name is required"
   end
 
   # --- Leaf command (no subcommands) ---
@@ -217,23 +230,23 @@ class Sift::CLI::BaseTest < Minitest::Test
     exit_code = run_leaf(["--count", "5"])
 
     assert_equal 0, exit_code
-    assert_equal "count=5\n", stdout_output
+    assert_equal "count=5\n", @stdout
   end
 
   def test_leaf_command_help
     exit_code = run_leaf(["--help"])
 
     assert_equal 0, exit_code
-    assert_includes stdout_output, "USAGE"
-    assert_includes stdout_output, "leaf [flags]"
-    assert_includes stdout_output, "--count"
+    assert_includes @stdout, "USAGE"
+    assert_includes @stdout, "leaf [flags]"
+    assert_includes @stdout, "--count"
   end
 
   def test_leaf_invalid_flag_type
     exit_code = run_leaf(["--count", "abc"])
 
     assert_equal 1, exit_code
-    assert_includes stderr_output, "Error:"
+    assert_includes @stderr, "Error:"
   end
 
   # --- execute not implemented ---
@@ -243,7 +256,7 @@ class Sift::CLI::BaseTest < Minitest::Test
       command_name "noop"
     end
 
-    cmd = klass.new([], stdin: StringIO.new, stdout: @stdout, stderr: @stderr)
+    cmd = klass.new([])
     assert_raises(NotImplementedError) { cmd.execute }
   end
 
@@ -262,20 +275,20 @@ class Sift::CLI::BaseTest < Minitest::Test
   end
 
   def test_examples
-    assert_equal ["testcli greet --name World", "testcli greet --name World --verbose"],
+    assert_equal ["testcli greet --name World", "testcli greet --name World --shout"],
       StubCommands::Child.examples
   end
 
   # --- full_command_name ---
 
   def test_full_command_name_root
-    root = StubCommands::Root.new([], stdin: StringIO.new, stdout: @stdout, stderr: @stderr)
+    root = StubCommands::Root.new([])
     assert_equal "testcli", root.full_command_name
   end
 
   def test_full_command_name_child
-    root = StubCommands::Root.new([], stdin: StringIO.new, stdout: @stdout, stderr: @stderr)
-    child = StubCommands::Child.new([], parent: root, stdin: StringIO.new, stdout: @stdout, stderr: @stderr)
+    root = StubCommands::Root.new([])
+    child = StubCommands::Child.new([], parent: root)
     assert_equal "testcli greet", child.full_command_name
   end
 end

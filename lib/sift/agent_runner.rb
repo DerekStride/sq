@@ -12,28 +12,48 @@ module Sift
       @client = client
       @task = task
       @semaphore = Async::Semaphore.new(limit, parent: task)
-      @agents = {} # item_id -> { task:, prompt:, started_at: }
+      @agents = {} # item_id -> { task:, prompt:, started_at:, general: }
+      @general_counter = 0
     end
 
     # Spawn a background agent for the given item.
     # Returns immediately — the agent runs as a child fiber.
-    def spawn(item_id, prompt_text, user_prompt, session_id: nil)
+    def spawn(item_id, prompt_text, user_prompt, session_id: nil, system_prompt: nil)
       Log.debug "agent spawn item=#{item_id} session=#{session_id || "new"} prompt=#{user_prompt.lines.first&.chomp}"
 
       agent_task = @semaphore.async do
         Log.debug "agent running item=#{item_id}"
-        @client.prompt(prompt_text, session_id: session_id)
-      rescue => e
-        # Rescue here so Async doesn't dump the backtrace to stderr.
-        Log.error "agent error item=#{item_id}: #{e.message}"
-        nil
+        @client.prompt(prompt_text, session_id: session_id, system_prompt: system_prompt)
+      rescue Client::Error => e
+        Log.warn "agent error item=#{item_id}: #{e.message}"
+        e
       end
 
-      @agents[item_id] = { task: agent_task, prompt: user_prompt, started_at: Time.now }
+      @agents[item_id] = { task: agent_task, prompt: user_prompt, started_at: Time.now, general: false }
+    end
+
+    # Spawn a general-purpose agent not tied to any queue item.
+    # Returns immediately — the agent runs as a child fiber.
+    def spawn_general(prompt_text, user_prompt, system_prompt: nil)
+      @general_counter += 1
+      key = format("_gen_%03d", @general_counter)
+
+      Log.debug "agent spawn_general key=#{key} prompt=#{user_prompt.lines.first&.chomp}"
+
+      agent_task = @semaphore.async do
+        Log.debug "agent running general key=#{key}"
+        @client.prompt(prompt_text, system_prompt: system_prompt)
+      rescue Client::Error => e
+        Log.warn "agent error general key=#{key}: #{e.message}"
+        e
+      end
+
+      @agents[key] = { task: agent_task, prompt: user_prompt, started_at: Time.now, general: true }
     end
 
     # Check for completed agents. Returns a hash of completed results:
-    #   { item_id => { result: Client::Result, prompt: String } }
+    #   { item_id => { result: Client::Result | nil, error: String | nil, prompt: String } }
+    # When the agent catches a Client::Error, result is nil and error contains the message.
     # Removes completed agents from tracking.
     def poll
       completed = {}
@@ -42,11 +62,17 @@ module Sift
         task = agent[:task]
         elapsed = (Time.now - agent[:started_at]).round(1)
         if task.completed?
-          Log.debug "agent completed item=#{item_id} elapsed=#{elapsed}s"
-          completed[item_id] = { result: task.result, prompt: agent[:prompt] }
+          result = task.result
+          if result.is_a?(Client::Error)
+            Log.debug "agent error item=#{item_id} elapsed=#{elapsed}s"
+            completed[item_id] = { result: nil, error: result.message, prompt: agent[:prompt], general: agent[:general] }
+          else
+            Log.debug "agent completed item=#{item_id} elapsed=#{elapsed}s"
+            completed[item_id] = { result: result, prompt: agent[:prompt], general: agent[:general] }
+          end
         elsif task.failed?
           Log.debug "agent failed item=#{item_id} elapsed=#{elapsed}s"
-          completed[item_id] = { result: nil, prompt: agent[:prompt] }
+          completed[item_id] = { result: nil, error: "Task failed unexpectedly", prompt: agent[:prompt], general: agent[:general] }
         else
           Log.debug "agent still running item=#{item_id} elapsed=#{elapsed}s"
         end
@@ -77,6 +103,11 @@ module Sift
     # but haven't been poll'd yet?
     def finished_count
       @agents.count { |_, a| a[:task].completed? || a[:task].failed? }
+    end
+
+    # How many general agents are currently running?
+    def general_running_count
+      @agents.count { |_, a| a[:general] }
     end
 
     # Stop all running agents.

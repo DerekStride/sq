@@ -6,6 +6,9 @@ require "minitest/reporters"
 
 Minitest::Reporters.use! [Minitest::Reporters::DefaultReporter.new(color: true)]
 
+# Suppress warn/info/debug logs during tests (override with SIFT_LOG_LEVEL=DEBUG)
+ENV["SIFT_LOG_LEVEL"] ||= "ERROR"
+
 # Load the gem
 require "sift"
 require "sift/cli"
@@ -33,10 +36,5 @@ module TestHelpers
   def create_temp_queue_path(dir = nil)
     dir ||= create_temp_dir
     File.join(dir, "queue.jsonl")
-  end
-
-  # Create a StringIO with the given content for stdin simulation
-  def stdin_with(content)
-    StringIO.new(content)
   end
 end

@@ -29,13 +29,13 @@ module Sift
           items = queue.filter(status: options[:status])
 
           if options[:json]
-            stdout.puts JSON.pretty_generate(items.map(&:to_h))
+            puts JSON.pretty_generate(items.map(&:to_h))
           else
             if items.empty?
-              Sift::Log.info "No items found"
+              logger.info("No items found")
             else
               items.each { |item| print_item_summary(item) }
-              Sift::Log.info "#{items.length} item(s)"
+              logger.info("#{items.length} item(s)")
             end
           end
 

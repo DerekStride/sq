@@ -38,17 +38,19 @@ module Sift
     end
 
     # Represents a queue item
-    Item = Struct.new(:id, :status, :sources, :metadata, :session_id, :created_at, :updated_at, keyword_init: true) do
+    Item = Struct.new(:id, :status, :sources, :metadata, :session_id, :errors, :created_at, :updated_at, keyword_init: true) do
       def to_h
-        {
+        h = {
           id: id,
           status: status,
           sources: sources.map(&:to_h),
           metadata: metadata,
           session_id: session_id,
           created_at: created_at,
-          updated_at: updated_at
+          updated_at: updated_at,
         }
+        h[:errors] = errors if errors && !errors.empty?
+        h
       end
 
       def to_json(*args)
@@ -66,6 +68,7 @@ module Sift
           sources: sources,
           metadata: hash["metadata"] || hash[:metadata] || {},
           session_id: hash["session_id"] || hash[:session_id],
+          errors: hash["errors"] || hash[:errors] || [],
           created_at: hash["created_at"] || hash[:created_at],
           updated_at: hash["updated_at"] || hash[:updated_at]
         )

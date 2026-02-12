@@ -23,18 +23,18 @@ module Sift
         def execute
           id = argv.shift
           unless id
-            stderr.puts "Error: Item ID is required"
+            logger.error("Item ID is required")
             return 1
           end
 
           item = queue.find(id)
           unless item
-            stderr.puts "Error: Item not found: #{id}"
+            logger.error("Item not found: #{id}")
             return 1
           end
 
           if options[:json]
-            stdout.puts JSON.pretty_generate(item.to_h)
+            puts JSON.pretty_generate(item.to_h)
           else
             print_item_detail(item)
           end
