@@ -292,6 +292,19 @@ class Sift::ReviewLoopTest < Minitest::Test
     end
   end
 
+  # --- general_agent_system_prompt tests ---
+
+  def test_general_agent_system_prompt_includes_queue_path
+    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+
+    prompt = rl.send(:general_agent_system_prompt)
+
+    assert_includes prompt, "sift"
+    assert_includes prompt, @queue_path
+    assert_includes prompt, "sq --help"
+    refute_includes prompt, "{{queue_path}}"
+  end
+
   # --- general agent key binding ---
 
   def test_review_item_loops_back_on_general

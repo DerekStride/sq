@@ -7,6 +7,8 @@ require "tempfile"
 
 module Sift
   class ReviewLoop
+    AGENT_DOCS_DIR = File.expand_path("../../../agent-docs", __FILE__)
+
     def initialize(queue:, model: "sonnet", dry: false, concurrency: 5, system_prompt: nil)
       @queue = queue
       @client = dry ? DryClient.new(model: model) : Client.new(model: model, system_prompt: system_prompt)
@@ -196,8 +198,17 @@ module Sift
       user_prompt = read_agent_prompt
       return if user_prompt.nil? || user_prompt.strip.empty?
 
-      @agent_runner.spawn_general(user_prompt, user_prompt)
+      @agent_runner.spawn_general(user_prompt, user_prompt, system_prompt: general_agent_system_prompt)
       puts ::CLI::UI.fmt("{{magenta:General agent started in background}}")
+    end
+
+    def general_agent_system_prompt
+      path = File.join(AGENT_DOCS_DIR, "general.md")
+      template = File.read(path)
+      template.gsub("{{queue_path}}", @queue.path)
+    rescue Errno::ENOENT
+      Log.warn "agent doc not found: #{path}"
+      nil
     end
 
     def handle_agent(item)
