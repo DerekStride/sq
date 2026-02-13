@@ -46,7 +46,8 @@ class Sift::ReviewLoopTest < Minitest::Test
     config.agent_system_prompt = tmpfile.path
     rl = Sift::ReviewLoop.new(config: config)
     client = rl.instance_variable_get(:@client)
-    assert_equal "You are a reviewer.", client.instance_variable_get(:@system_prompt)
+    client_config = client.instance_variable_get(:@config)
+    assert_equal "You are a reviewer.", client_config.agent_system_prompt
   ensure
     tmpfile&.unlink
   end
@@ -381,7 +382,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_process_completed_general_agent_error_does_not_create_item
     error_client = Object.new
-    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil|
+    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
       raise Sift::Client::Error, "API error"
     end
 
@@ -404,7 +405,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_process_completed_agents_records_error_on_item
     error_client = Object.new
-    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil|
+    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
       raise Sift::Client::Error, "No conversation found with session ID: bad-id"
     end
 
@@ -474,6 +475,121 @@ class Sift::ReviewLoopTest < Minitest::Test
       assert_equal 1, updated.sources.size
       assert updated.session_id
     end
+  end
+
+  # --- worktree integration tests ---
+
+  def test_handle_agent_creates_worktree_and_spawns_with_cwd
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    rl = Sift::ReviewLoop.new(config: build_config)
+
+    wt = Sift::Queue::Worktree.new(path: ".sift/worktrees/#{item.id}", branch: "sift/#{item.id}")
+    worktree_created = false
+    spawned_cwd = nil
+
+    mock_client = Object.new
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+      spawned_cwd = cwd
+      Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
+    end
+
+    Sift::Worktree.stub(:create, ->(_id, base_branch:, setup_command:) {
+      worktree_created = true
+      wt
+    }) do
+      Sync do |task|
+        runner = Sift::AgentRunner.new(client: mock_client, task: task)
+        rl.instance_variable_set(:@agent_runner, runner)
+        rl.instance_variable_set(:@client, mock_client)
+
+        # Simulate typing "review" + Enter
+        chars = "review\r".chars
+        char_index = 0
+        $stdin.stub(:getch, -> {
+          c = chars[char_index] || "\r"
+          char_index += 1
+          c
+        }) do
+          capture_cli_ui_output { rl.send(:handle_agent, item) }
+        end
+
+        task.yield
+      end
+    end
+
+    assert worktree_created, "Worktree should have been created"
+    assert_equal ".sift/worktrees/#{item.id}", spawned_cwd
+
+    # Verify worktree was persisted on the queue item
+    updated = @queue.find(item.id)
+    assert_equal ".sift/worktrees/#{item.id}", updated.worktree&.path
+  end
+
+  def test_handle_agent_uses_existing_worktree
+    wt = Sift::Queue::Worktree.new(path: ".sift/worktrees/existing", branch: "sift/existing")
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    @queue.update(item.id, worktree: wt)
+    item = @queue.find(item.id)
+
+    rl = Sift::ReviewLoop.new(config: build_config)
+
+    worktree_created = false
+    spawned_cwd = nil
+
+    mock_client = Object.new
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+      spawned_cwd = cwd
+      Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
+    end
+
+    Sift::Worktree.stub(:create, ->(*args, **kwargs) {
+      worktree_created = true
+      raise "Should not be called"
+    }) do
+      Sync do |task|
+        runner = Sift::AgentRunner.new(client: mock_client, task: task)
+        rl.instance_variable_set(:@agent_runner, runner)
+        rl.instance_variable_set(:@client, mock_client)
+
+        chars = "review\r".chars
+        char_index = 0
+        $stdin.stub(:getch, -> {
+          c = chars[char_index] || "\r"
+          char_index += 1
+          c
+        }) do
+          capture_cli_ui_output { rl.send(:handle_agent, item) }
+        end
+
+        task.yield
+      end
+    end
+
+    refute worktree_created, "Should not create worktree when one exists"
+    assert_equal ".sift/worktrees/existing", spawned_cwd
+  end
+
+  def test_handle_general_agent_does_not_create_worktree
+    rl = Sift::ReviewLoop.new(config: build_config)
+
+    worktree_created = false
+
+    Sift::Worktree.stub(:create, ->(*args, **kwargs) {
+      worktree_created = true
+      raise "Should not be called"
+    }) do
+      Sync do |task|
+        runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+        rl.instance_variable_set(:@agent_runner, runner)
+
+        # Stub getch to return Enter (empty prompt → no-op)
+        $stdin.stub(:getch, "\r") do
+          capture_cli_ui_output { rl.send(:handle_general_agent) }
+        end
+      end
+    end
+
+    refute worktree_created, "General agent should not create worktree"
   end
 
   private

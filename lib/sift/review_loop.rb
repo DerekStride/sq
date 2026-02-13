@@ -13,7 +13,7 @@ module Sift
     def initialize(config:)
       @config = config
       @queue = Queue.new(config.queue_path)
-      @client = config.dry? ? DryClient.new(model: config.agent_model) : Client.new(model: config.agent_model, system_prompt: config.agent_system_prompt)
+      @client = config.dry? ? DryClient.new(config: config) : Client.new(config: config)
       @concurrency = config.concurrency
     end
 
@@ -275,10 +275,20 @@ module Sift
       user_prompt = read_agent_prompt
       return if user_prompt.nil? || user_prompt.strip.empty?
 
+      # Auto-create worktree on first agent invocation
+      if item.worktree.nil?
+        wt = Sift::Worktree.create(item.id,
+          base_branch: @config.worktree_base_branch,
+          setup_command: @config.worktree_setup_command)
+        @queue.update(item.id, worktree: wt)
+        item = @queue.find(item.id)
+      end
+
       prompt_text = build_agent_prompt(item, user_prompt)
       system_prompt = resolve_system_prompt(item)
       @agent_runner.spawn(item.id, prompt_text, user_prompt,
-        session_id: item.session_id, system_prompt: system_prompt)
+        session_id: item.session_id, system_prompt: system_prompt,
+        cwd: item.worktree&.path)
       refresh_statusline
       puts ::CLI::UI.fmt("{{blue:Agent started in background}}")
     end

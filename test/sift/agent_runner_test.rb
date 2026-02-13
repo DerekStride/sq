@@ -93,7 +93,7 @@ class Sift::AgentRunnerTest < Minitest::Test
   def test_spawn_passes_session_id_to_client
     received_session_id = nil
     mock_client = Object.new
-    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil|
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
       received_session_id = session_id
       Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
     end
@@ -111,7 +111,7 @@ class Sift::AgentRunnerTest < Minitest::Test
   def test_spawn_passes_system_prompt_to_client
     received_system_prompt = nil
     mock_client = Object.new
-    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil|
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
       received_system_prompt = system_prompt
       Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
     end
@@ -123,6 +123,42 @@ class Sift::AgentRunnerTest < Minitest::Test
       task.yield
 
       assert_equal "You are a reviewer.", received_system_prompt
+    end
+  end
+
+  def test_spawn_passes_cwd_to_client
+    received_cwd = nil
+    mock_client = Object.new
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+      received_cwd = cwd
+      Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
+    end
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: mock_client, task: task)
+      runner.spawn("abc", "prompt", "user", cwd: "/worktrees/abc")
+
+      task.yield
+
+      assert_equal "/worktrees/abc", received_cwd
+    end
+  end
+
+  def test_spawn_cwd_nil_by_default
+    received_cwd = :not_called
+    mock_client = Object.new
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+      received_cwd = cwd
+      Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
+    end
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: mock_client, task: task)
+      runner.spawn("abc", "prompt", "user")
+
+      task.yield
+
+      assert_nil received_cwd
     end
   end
 
@@ -194,7 +230,7 @@ class Sift::AgentRunnerTest < Minitest::Test
 
   def test_poll_returns_error_when_client_raises
     error_client = Object.new
-    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil|
+    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
       raise Sift::Client::Error, "No conversation found with session ID: abc-123"
     end
 

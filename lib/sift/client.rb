@@ -10,20 +10,21 @@ module Sift
 
     Result = Struct.new(:response, :session_id, :raw, keyword_init: true)
 
-    def initialize(model: nil, system_prompt: nil)
-      @model = model
-      @system_prompt = system_prompt
+    def initialize(config:)
+      @config = config
     end
 
     # Send a prompt to Claude, optionally resuming a session.
     # system_prompt overrides the instance default when provided.
     # Returns Result with response text and session_id
-    def prompt(text, session_id: nil, system_prompt: nil)
+    def prompt(text, session_id: nil, system_prompt: nil, cwd: nil)
       args = build_args(session_id:, system_prompt:)
-      Log.debug "client start cmd=#{args.join(" ")}"
+      Log.debug "client start cmd=#{args.join(" ")} cwd=#{cwd || "(inherit)"}"
       start = Time.now
 
-      stdout, stderr, status = Open3.capture3(*args, stdin_data: text)
+      capture_opts = { stdin_data: text }
+      capture_opts[:chdir] = cwd if cwd
+      stdout, stderr, status = Open3.capture3(*args, **capture_opts)
       elapsed = (Time.now - start).round(1)
 
       unless status.success?
@@ -44,9 +45,11 @@ module Sift
     private
 
     def build_args(session_id: nil, system_prompt: nil)
-      effective_prompt = system_prompt || @system_prompt
-      args = ["claude", "-p", "--output-format", "json"]
-      args += ["--model", @model] if @model
+      effective_prompt = system_prompt || @config.agent_system_prompt
+      args = [@config.agent_command, "-p", "--output-format", "json"]
+      args += @config.agent_flags if @config.agent_flags&.any?
+      @config.agent_allowed_tools&.each { |tool| args += ["--allowedTools", tool] }
+      args += ["--model", @config.agent_model] if @config.agent_model
       args += ["--system-prompt", effective_prompt] if effective_prompt
       args += ["--resume", session_id] if session_id
       args
@@ -81,12 +84,13 @@ module Sift
   # No-op client for testing the review flow without API calls.
   # Returns a canned response and logs prompt details via Sift::Log.
   class DryClient
-    def initialize(model: nil)
-      @model = model
+    def initialize(config: nil)
+      @config = config
     end
 
-    def prompt(text, session_id: nil, system_prompt: nil)
-      Sift::Log.debug "[dry] model=#{@model || "default"} session=#{session_id || "new"}"
+    def prompt(text, session_id: nil, system_prompt: nil, cwd: nil)
+      model = @config&.agent_model
+      Sift::Log.debug "[dry] model=#{model || "default"} session=#{session_id || "new"} cwd=#{cwd || "(inherit)"}"
       Sift::Log.debug "[dry] prompt: #{text.lines.first&.chomp}"
       Client::Result.new(
         response: "[dry mode] No API call made.",
