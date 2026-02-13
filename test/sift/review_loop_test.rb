@@ -479,7 +479,7 @@ class Sift::ReviewLoopTest < Minitest::Test
   private
 
   def build_config(dry: true, **overrides)
-    config = Sift::Config.new(overrides.transform_keys(&:to_s))
+    config = Sift::Config.new({}, overrides.transform_keys(&:to_s))
     config.queue_path = @queue_path
     config.dry = dry
     config

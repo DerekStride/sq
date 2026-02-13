@@ -3,10 +3,11 @@
 require "yaml"
 
 module Sift
-  # Project-level configuration loaded from .sift/config.yml.
+  # Configuration loaded from user (~/.config/sift/config.yml)
+  # and project (.sift/config.yml) tiers with deep merge.
   #
   # Precedence (highest to lowest):
-  #   CLI flags > env vars > config file > hardcoded defaults
+  #   CLI flags > env vars > project config > user config > hardcoded defaults
   #
   # Config is optional — sift works without it using defaults.
   # CLI commands load config once, apply env var overrides, then
@@ -17,7 +18,8 @@ module Sift
   # validated at set-time. Raises Sift::Config::FileNotFound if
   # a referenced file doesn't exist.
   class Config
-    DEFAULT_PATH = ".sift/config.yml"
+    DEFAULT_PROJECT_PATH = ".sift/config.yml"
+    DEFAULT_PATH = DEFAULT_PROJECT_PATH
 
     class FileNotFound < Sift::Error; end
 
@@ -38,8 +40,21 @@ module Sift
       "dry" => false,
     }.freeze
 
-    def self.load(path = DEFAULT_PATH)
-      file_data = if File.exist?(path)
+    def self.default_user_path
+      File.join(ENV.fetch("XDG_CONFIG_HOME", File.join(Dir.home, ".config")), "sift", "config.yml")
+    end
+
+    def self.load(project_path: DEFAULT_PROJECT_PATH, user_path: default_user_path)
+      user_data = load_yaml(user_path)
+      project_data = load_yaml(project_path)
+      config = new(user_data, project_data)
+      config.send(:apply_env_vars)
+      config.send(:resolve_file_values)
+      config
+    end
+
+    private_class_method def self.load_yaml(path)
+      if File.exist?(path)
         parsed = YAML.safe_load_file(path) || {}
         Log.debug "config loaded from #{path}"
         parsed
@@ -47,14 +62,10 @@ module Sift
         Log.debug "no config file at #{path}, using defaults"
         {}
       end
-      config = new(file_data)
-      config.send(:apply_env_vars)
-      config.send(:resolve_file_values)
-      config
     end
 
-    def initialize(file_data = {})
-      @data = deep_merge(DEFAULTS, file_data)
+    def initialize(user_data = {}, project_data = {})
+      @data = deep_merge(deep_merge(DEFAULTS, user_data), project_data)
     end
 
     # -- Agent settings (readers) --
