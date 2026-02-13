@@ -38,6 +38,8 @@ module Sift
               item.sources.each_with_index do |source, i|
                 print_source(source, i)
               end
+
+              print_transcript(item.session_id) if item.session_id
             end
           else
             puts "Item: #{item.id}"
@@ -57,6 +59,8 @@ module Sift
             item.sources.each_with_index do |source, i|
               print_source(source, i)
             end
+
+            print_transcript(item.session_id) if item.session_id
           end
         end
 
@@ -79,6 +83,36 @@ module Sift
               puts "      #{preview}"
             end
           end
+        end
+
+        def print_transcript(session_id)
+          path = Sift::SessionTranscript.find_session(session_id)
+          return unless path
+
+          first_prompt = first_user_prompt(path)
+          preview = first_prompt ? first_prompt.lines.first.chomp : ""
+
+          if cli_ui_available?
+            puts ::CLI::UI.fmt("  {{yellow:[transcript]}} {{bold:session}} {{gray:#{session_id[0, 8]}...}}")
+            puts ::CLI::UI.fmt("      {{gray:#{preview}}}") unless preview.empty?
+          else
+            puts "  [transcript] session #{session_id[0, 8]}..."
+            puts "      #{preview}" unless preview.empty?
+          end
+        end
+
+        def first_user_prompt(path)
+          File.foreach(path) do |line|
+            next if line.strip.empty?
+            data = JSON.parse(line)
+            msg = data["message"]
+            next unless data["type"] == "user" && msg
+            content = msg["content"]
+            return content if content.is_a?(String) && !content.strip.empty?
+          rescue JSON::ParserError
+            next
+          end
+          nil
         end
 
         def status_color_code(status)
