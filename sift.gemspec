@@ -21,7 +21,7 @@ Gem::Specification.new do |spec|
     README.md
   ])
   spec.bindir = "exe"
-  spec.executables = ["sift"]
+  spec.executables = ["sift", "sq"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "async", "~> 2.0"

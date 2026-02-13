@@ -15,92 +15,72 @@ Traditional agent CLIs: agent drives, human occasionally intervenes.
 └─────────────┘     └──────────────┘     └─────────────┘
 ```
 
+The queue is the coordination mechanism. Humans review items, spawn agents for analysis, and close items when done. Agents run in the background and their results flow back as new sources on queue items — or as entirely new items.
+
 ## Quick Start
 
 ```bash
 bundle install
 
-# Review queue items interactively
-sift
-
-# Manage the review queue
+# Add items to the queue
 sq add --text "Review this change"
 sq add --diff changes.patch --file main.rb
-sq list --status pending
-sq show <id>
+sq add --stdin text < notes.txt
+
+# Launch the interactive review TUI
+sift
+
+# Or in dry mode (no API calls)
+sift --dry
 ```
 
-## TUI Hotkeys
+## TUI Actions
 
-| Key | Action |
-|-----|--------|
-| `a` | Accept (stages hunk) |
-| `r` | Reject (reverts hunk) |
-| `c` | Add comment |
-| `?` | Ask Claude for analysis |
-| `v` | Revise analysis with feedback |
-| `q` | Quit |
+The core workflow in the review TUI:
+
+- **View** (`v`) — open item sources in `$EDITOR` to read the full context
+- **Agent** (`a`) — spawn a background agent for this item. You provide an instruction and the agent runs with the item's sources as context. When it finishes, the conversation transcript is appended to the item.
+- **Close** (`c`) — mark the item as closed and move to the next one
+- **General** (`g`) — spawn a free-form agent not tied to any item
+
+When you press `a` or `g`, type your instruction inline or press `Ctrl+G` to compose in `$EDITOR`.
+
+Run `sift --help` for all available options.
+
+## How Agents Work
+
+Agents run in the background. While an agent works on one item, you can continue reviewing others.
+
+When an agent finishes, its conversation transcript is appended as a new source on the item. The agent's session ID is stored on the item, so subsequent agent invocations continue the same conversation — enabling multi-turn refinement.
+
+**General agents** are useful for multiple use-cases including:
+
+1. **Actioning insights during review** — when you notice something while reviewing, spawn a general agent to investigate. General agents are given the context to use `sq` themselves, so they can add new items to the queue for you to review.
+2. **Exploring and explaining** — ask a general agent to research or explain something. When it finishes, the result shows up as a new queue item, and you can continue reviewing it like any other item.
 
 ## `sq` — Queue Management CLI
 
-`sq` manages the JSONL review queue. Each subcommand is its own class under `Sift::CLI::Queue::*`.
+Manage the JSONL review queue from the command line.
 
 ```bash
-sq add --text "Review this"          # Add item with text source
-sq add --diff changes.patch          # Add item with diff source
-sq add --stdin text < file.txt       # Add item from stdin
-sq list                              # List all items
-sq list --status pending --json      # Filter + JSON output
-sq show <id>                         # Show item details
-sq edit <id> --set-status approved   # Update item status
-sq rm <id>                           # Remove item
+sq add --text "Review this"                    # Add item with text
+sq add --diff changes.patch --file main.rb     # Add with diff + file source
+sq add --stdin text < file.txt                 # Add from stdin
+sq add --system-prompt prompts/review.md       # Add with per-item system prompt
+sq add --metadata '{"priority":"high"}'        # Add with metadata
+
+sq list                                        # List all items
+sq list --status pending                       # Filter by status
+sq list --json                                 # JSON output
+
+sq show <id>                                   # Show item details
+
+sq edit <id> --set-status closed               # Modify item fields
+
+sq rm <id>                                     # Remove item
 ```
 
 Run `sq --help` or `sq <command> --help` for full flag details.
-
-## Architecture
-
-```
-lib/sift/
-├── cli.rb                # CLI module
-├── cli/
-│   ├── base.rb           # Base command class (OptionParser, subcommand routing)
-│   ├── help_renderer.rb  # gh-style help output
-│   ├── queue_command.rb  # `sq` root command
-│   └── queue/            # One class per subcommand
-│       ├── add.rb
-│       ├── edit.rb
-│       ├── list.rb
-│       ├── show.rb
-│       ├── rm.rb
-│       └── formatters.rb # Shared output helpers
-├── client.rb             # Claude API wrapper
-├── diff_parser.rb        # Git diff → hunks
-├── git_actions.rb        # Stage/revert hunks
-├── queue.rb              # JSONL queue
-├── review_loop.rb        # TUI review flow
-└── roast/                # Roast integration
-    ├── orchestrator.rb
-    └── cogs/
-        └── sift_output.rb
-```
-
-## Roast Integration
-
-Sift can orchestrate [Roast](https://github.com/Shopify/roast) workflows:
-
-```ruby
-# Wrapper approach - Sift calls Roast externally
-orchestrator = Sift::Roast::Orchestrator.new
-orchestrator.run("analyze.rb", targets: [file])
-
-# Custom cog approach - Roast workflows push to Sift
-use [:sift_output], from: "sift/roast/cogs/sift_output"
-execute do
-  agent(:analyze) { target! }
-  sift_output(:result) { agent!(:analyze).response }
-end
-```
 
 ## Development
 
@@ -108,6 +88,4 @@ end
 bundle exec rake test
 ```
 
-## Status
-
-Early prototype. See `doc/specs/EXPLORATION.md` for design notes.
+Set `SIFT_LOG_LEVEL=DEBUG` for verbose logging.

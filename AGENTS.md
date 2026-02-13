@@ -6,38 +6,32 @@
 
 ## Key Concepts
 
-- **Queue**: JSONL-based work items (review, analysis, revision)
-- **Review Loop**: TUI for human decisions (approve/reject/revise)
-- **Sticky Sessions**: Agent conversations persist per item for revisions
-- **Roast Integration**: Can orchestrate Roast workflows or use custom cogs
+- **Queue**: JSONL-based work items with typed sources (diff, file, transcript, text)
+- **Review Loop**: TUI where humans view items, spawn agents, close items, or ask general questions
+- **Background Agents**: Run as Async fibers with semaphore-limited concurrency
+- **Sticky Sessions**: Agent conversations persist per item via Claude session IDs
+- **General Agents**: Free-form agents not tied to items — results become new queue items
+- **System Prompts**: Customizable per-session or per-item agent behavior
 
 ## Project Structure
 
 ```
 lib/sift/
-├── cli.rb                # CLI module
+├── cli.rb                  # CLI module
 ├── cli/
-│   ├── base.rb           # Base command class (OptionParser, subcommand routing)
-│   ├── help_renderer.rb  # gh-style help output
-│   ├── queue_command.rb  # `sq` root command
-│   └── queue/            # One class per subcommand
-│       ├── add.rb
-│       ├── edit.rb
-│       ├── list.rb
-│       ├── show.rb
-│       ├── rm.rb
-│       └── formatters.rb # Shared output helpers
-├── review_loop.rb        # Main TUI flow
-├── queue.rb              # JSONL queue management
-├── client.rb             # Claude API wrapper
-├── diff_parser.rb        # Git diff parsing
-├── git_actions.rb        # Stage/revert operations
-└── roast/                # Roast integration layer
+│   ├── base.rb             # Base command class (OptionParser, subcommand routing)
+│   ├── help_renderer.rb    # gh-style help output
+│   ├── sift_command.rb     # `sift` TUI entry point
+│   ├── queue_command.rb    # `sq` root command dispatcher
+│   └── queue/              # One class per sq subcommand (add, edit, list, show, rm)
+├── review_loop.rb          # Main TUI flow with Async concurrency
+├── queue.rb                # JSONL queue with file locking
+├── client.rb               # Claude CLI wrapper with session support
+├── agent_runner.rb         # Background agent management (Async + Semaphore)
+└── log.rb                  # Logging with TUI-safe buffering
 ```
 
-## Design Documents
-
-- `doc/specs/EXPLORATION.md` - Original design exploration and decisions
+Other supporting modules (statusline, editor, session transcript parsing, etc.) live alongside these in `lib/sift/`. Explore the directory for the full picture.
 
 ## Running Tests
 
@@ -49,18 +43,21 @@ bundle exec rake test
 
 Two executables in `exe/`:
 
-- **`sift`** — Interactive review loop TUI. Reads queue items, presents them for human review.
+- **`sift`** — Interactive review loop TUI. Run `sift --help` to see all options.
 - **`sq`** — Queue management CLI. Add, list, show, edit, and remove queue items.
 
 ### `sq` Subcommands
 
 ```bash
-sq add --text "Review this"          # Add item with text source
-sq add --diff changes.patch          # Add item with diff source
-sq list --status pending             # List/filter items
-sq show <id> --json                  # Show item details
-sq edit <id> --set-status approved   # Modify item
-sq rm <id>                           # Remove item
+sq add --text "Review this"             # Add item with text source
+sq add --diff changes.patch             # Add item with diff source
+sq add --stdin text < file.txt          # Add from stdin
+sq add --system-prompt prompts/sec.md   # Per-item system prompt
+sq list --status pending                # List/filter items
+sq list --json                          # JSON output
+sq show <id> --json                     # Show item details
+sq edit <id> --set-status closed        # Modify item
+sq rm <id>                              # Remove item
 ```
 
 Run `sq --help` or `sq <command> --help` for full flag details.
@@ -95,16 +92,33 @@ register_subcommand Queue::MyCommand, category: :core
 
 ### Review Loop Flow
 
-1. Load diff hunks
-2. Display hunk (no Claude call yet)
-3. Human decides: `a`ccept / `r`eject / `?` ask Claude
-4. If `?`: Claude analyzes, show result, prompt again
-5. Accept → stage hunk, Reject → revert hunk
+1. Load pending items from queue
+2. Display item card (sources grouped by type)
+3. Human chooses action: `v`iew / `a`gent / `c`lose / `g`eneral / `n`ext / `p`rev / `q`uit
+4. If `a`gent: prompt for instruction → spawn background agent → continue reviewing
+5. If `g`eneral: prompt for instruction → spawn free-form agent → result becomes new queue item
+6. If `c`lose: mark item closed, advance to next
+7. When agents finish: transcript appended as source, session_id stored for continuity
+8. Loop exits when no pending items remain and no agents are running
 
-### Roast Integration
+### Agent Session Continuity
 
-1. **Wrapper**: Sift calls `Roast::Workflow.from_file` externally
-2. **Custom Cog**: Roast workflows use `sift_output` cog to push results
+- First agent turn: all item sources are included in the prompt
+- Subsequent turns: only the user prompt is sent (Claude `--resume` handles context)
+- Session ID is stored on the queue item for future turns
+
+### Async Concurrency
+
+- `AgentRunner` manages background fibers gated by `Async::Semaphore`
+- `ReviewLoop` polls for completed agents between user actions
+- Non-blocking input loop ticks the statusline spinner while waiting for keystrokes
+- `Log.quiet { ... }` buffers debug/info logs during input to prevent stderr corruption
+
+### File Locking
+
+- Queue uses `flock(LOCK_EX)` for writes, `flock(LOCK_SH)` for reads
+- `claim(id)` atomically transitions pending → in_progress (with auto-release block form)
+- Corrupt JSONL lines are skipped with a warning, not fatal
 
 ## Issue Tracking
 
@@ -117,4 +131,3 @@ bd update <id> -s in_progress  # Claim work
 bd close <id> -r "reason"      # Complete work
 bd dep add <id> <blocker>      # Add dependency
 ```
-
