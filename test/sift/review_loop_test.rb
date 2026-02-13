@@ -20,27 +20,35 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   # --- Constructor tests ---
 
-  def test_initializes_with_queue
-    loop = Sift::ReviewLoop.new(queue: @queue)
-    assert_instance_of Sift::ReviewLoop, loop
+  def test_initializes_with_config
+    rl = Sift::ReviewLoop.new(config: build_config)
+    assert_instance_of Sift::ReviewLoop, rl
   end
 
   def test_initializes_with_dry_mode
-    loop = Sift::ReviewLoop.new(queue: @queue, dry: true)
-    client = loop.instance_variable_get(:@client)
+    rl = Sift::ReviewLoop.new(config: build_config(dry: true))
+    client = rl.instance_variable_get(:@client)
     assert_instance_of Sift::DryClient, client
   end
 
   def test_initializes_without_dry_mode
-    loop = Sift::ReviewLoop.new(queue: @queue)
-    client = loop.instance_variable_get(:@client)
+    rl = Sift::ReviewLoop.new(config: build_config(dry: false))
+    client = rl.instance_variable_get(:@client)
     assert_instance_of Sift::Client, client
   end
 
   def test_initializes_with_system_prompt
-    loop = Sift::ReviewLoop.new(queue: @queue, system_prompt: "You are a reviewer.")
-    client = loop.instance_variable_get(:@client)
+    tmpfile = Tempfile.new(["sp-", ".md"])
+    tmpfile.write("You are a reviewer.")
+    tmpfile.close
+
+    config = build_config(dry: false)
+    config.agent_system_prompt = tmpfile.path
+    rl = Sift::ReviewLoop.new(config: config)
+    client = rl.instance_variable_get(:@client)
     assert_equal "You are a reviewer.", client.instance_variable_get(:@system_prompt)
+  ensure
+    tmpfile&.unlink
   end
 
   # --- resolve_system_prompt tests ---
@@ -54,9 +62,9 @@ class Sift::ReviewLoopTest < Minitest::Test
       sources: [{ type: "text", content: "test" }],
       metadata: { "system_prompt" => tmpfile.path },
     )
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
-    result = loop.send(:resolve_system_prompt, item)
+    result = rl.send(:resolve_system_prompt, item)
     assert_equal "You are a reviewer.", result
   ensure
     tmpfile&.unlink
@@ -64,9 +72,9 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_resolve_system_prompt_returns_nil_without_metadata
     item = @queue.push(sources: [{ type: "text", content: "test" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
-    assert_nil loop.send(:resolve_system_prompt, item)
+    assert_nil rl.send(:resolve_system_prompt, item)
   end
 
   def test_resolve_system_prompt_returns_nil_for_missing_file
@@ -74,10 +82,10 @@ class Sift::ReviewLoopTest < Minitest::Test
       sources: [{ type: "text", content: "test" }],
       metadata: { "system_prompt" => "/nonexistent/prompt.md" },
     )
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     _, stderr = with_log_level("WARN") do
-      capture_io { assert_nil loop.send(:resolve_system_prompt, item) }
+      capture_io { assert_nil rl.send(:resolve_system_prompt, item) }
     end
 
     assert_includes stderr, "system prompt file not found"
@@ -90,10 +98,10 @@ class Sift::ReviewLoopTest < Minitest::Test
       { type: "diff", path: "foo.rb", content: "+new line\n" },
       { type: "file", path: "bar.rb", content: "class Bar; end" },
     ])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     item = @queue.all.first
-    prompt = loop.send(:build_agent_prompt, item, "Review this")
+    prompt = rl.send(:build_agent_prompt, item, "Review this")
 
     assert_includes prompt, "File: foo.rb"
     assert_includes prompt, "```diff"
@@ -108,9 +116,9 @@ class Sift::ReviewLoopTest < Minitest::Test
       sources: [{ type: "text", content: "should not appear" }],
       session_id: "existing-session",
     )
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
-    prompt = loop.send(:build_agent_prompt, item, "Follow-up question")
+    prompt = rl.send(:build_agent_prompt, item, "Follow-up question")
 
     assert_equal "Follow-up question", prompt
     refute_includes prompt, "should not appear"
@@ -118,10 +126,10 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_build_agent_prompt_with_diff_source
     @queue.push(sources: [{ type: "diff", path: "x.rb", content: "+added\n" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     item = @queue.all.first
-    prompt = loop.send(:build_agent_prompt, item, "check it")
+    prompt = rl.send(:build_agent_prompt, item, "check it")
 
     assert_includes prompt, "File: x.rb"
     assert_includes prompt, "```diff"
@@ -131,10 +139,10 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_build_agent_prompt_with_file_source
     @queue.push(sources: [{ type: "file", path: "bar.rb", content: "class Bar; end" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     item = @queue.all.first
-    prompt = loop.send(:build_agent_prompt, item, "review")
+    prompt = rl.send(:build_agent_prompt, item, "review")
 
     assert_includes prompt, "File: bar.rb"
     assert_includes prompt, "class Bar; end"
@@ -142,10 +150,10 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_build_agent_prompt_with_text_source
     @queue.push(sources: [{ type: "text", content: "some notes" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     item = @queue.all.first
-    prompt = loop.send(:build_agent_prompt, item, "summarize")
+    prompt = rl.send(:build_agent_prompt, item, "summarize")
 
     assert_includes prompt, "some notes"
     assert_includes prompt, "summarize"
@@ -155,9 +163,9 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_handle_close_sets_status_to_closed
     item = @queue.push(sources: [{ type: "text", content: "test" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
-    loop.send(:handle_close, item)
+    rl.send(:handle_close, item)
 
     updated = @queue.find(item.id)
     assert_equal "closed", updated.status
@@ -172,10 +180,10 @@ class Sift::ReviewLoopTest < Minitest::Test
       { type: "file", path: "c.rb" },
       { type: "text", content: "notes" },
     ])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
-    output = capture_cli_ui_output { loop.send(:display_card, item) }
+    output = capture_cli_ui_output { rl.send(:display_card, item) }
 
     assert_includes output, "diff"
     assert_includes output, "a.rb"
@@ -188,20 +196,20 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_display_card_shows_position_when_provided
     @queue.push(sources: [{ type: "text", content: "test" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
-    output = capture_cli_ui_output { loop.send(:display_card, item, position: 2, total: 5) }
+    output = capture_cli_ui_output { rl.send(:display_card, item, position: 2, total: 5) }
 
     assert_includes output, "[2/5]"
   end
 
   def test_display_card_omits_position_when_not_provided
     @queue.push(sources: [{ type: "text", content: "test" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
-    output = capture_cli_ui_output { loop.send(:display_card, item) }
+    output = capture_cli_ui_output { rl.send(:display_card, item) }
 
     refute_includes output, "/"
   end
@@ -211,9 +219,9 @@ class Sift::ReviewLoopTest < Minitest::Test
       sources: [{ type: "text", content: "test" }],
       session_id: "some-session",
     )
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
-    output = capture_cli_ui_output { loop.send(:display_card, item) }
+    output = capture_cli_ui_output { rl.send(:display_card, item) }
 
     assert_includes output, "transcript"
     assert_includes output, "[session]"
@@ -221,10 +229,10 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_display_card_omits_transcript_without_session_id
     @queue.push(sources: [{ type: "text", content: "test" }])
-    loop = Sift::ReviewLoop.new(queue: @queue)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
-    output = capture_cli_ui_output { loop.send(:display_card, item) }
+    output = capture_cli_ui_output { rl.send(:display_card, item) }
 
     refute_includes output, "transcript"
     refute_includes output, "[session]"
@@ -234,7 +242,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_review_item_returns_next_on_n_key
     @queue.push(sources: [{ type: "text", content: "test" }])
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
     Sync do |task|
@@ -252,7 +260,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_review_item_returns_prev_on_p_key
     @queue.push(sources: [{ type: "text", content: "test" }])
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
     Sync do |task|
@@ -270,7 +278,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_nav_keys_ignored_with_single_item
     @queue.push(sources: [{ type: "text", content: "test" }])
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
     Sync do |task|
@@ -289,7 +297,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_review_item_returns_acted_on_close
     @queue.push(sources: [{ type: "text", content: "test" }])
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
     Sync do |task|
@@ -308,7 +316,7 @@ class Sift::ReviewLoopTest < Minitest::Test
   # --- general_agent_system_prompt tests ---
 
   def test_general_agent_system_prompt_includes_queue_path
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     prompt = rl.send(:general_agent_system_prompt)
 
@@ -322,7 +330,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_review_item_loops_back_on_general
     @queue.push(sources: [{ type: "text", content: "test" }])
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
     item = @queue.all.first
 
     Sync do |task|
@@ -348,7 +356,7 @@ class Sift::ReviewLoopTest < Minitest::Test
   # --- process_completed_agents tests ---
 
   def test_process_completed_general_agent_creates_new_item
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     Sync do |task|
       runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
@@ -377,7 +385,7 @@ class Sift::ReviewLoopTest < Minitest::Test
       raise Sift::Client::Error, "API error"
     end
 
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     Sync do |task|
       runner = Sift::AgentRunner.new(client: error_client, task: task)
@@ -404,7 +412,7 @@ class Sift::ReviewLoopTest < Minitest::Test
       sources: [{ type: "text", content: "original" }],
       session_id: "bad-id",
     )
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     Sync do |task|
       runner = Sift::AgentRunner.new(client: error_client, task: task)
@@ -427,7 +435,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_process_completed_agents_sets_session_id
     item = @queue.push(sources: [{ type: "text", content: "original" }])
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     Sync do |task|
       runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
@@ -447,7 +455,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_quit_saves_completed_agent_session_id
     item = @queue.push(sources: [{ type: "text", content: "original" }])
-    rl = Sift::ReviewLoop.new(queue: @queue, dry: true)
+    rl = Sift::ReviewLoop.new(config: build_config)
 
     Sync do |task|
       runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
@@ -469,6 +477,13 @@ class Sift::ReviewLoopTest < Minitest::Test
   end
 
   private
+
+  def build_config(dry: true, **overrides)
+    config = Sift::Config.new(overrides.transform_keys(&:to_s))
+    config.queue_path = @queue_path
+    config.dry = dry
+    config
+  end
 
   def capture_cli_ui_output
     old_stdout = $stdout

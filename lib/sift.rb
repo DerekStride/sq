@@ -6,6 +6,7 @@ end
 
 require_relative "sift/version"
 require_relative "sift/log"
+require_relative "sift/config"
 require_relative "sift/client"
 require_relative "sift/cli"
 require_relative "sift/queue"

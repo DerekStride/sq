@@ -36,49 +36,48 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     assert_includes out, "--verbose"
   end
 
-  def test_default_options
+  def test_default_config_values
     cmd = Sift::CLI::SiftCommand.new([])
-    # Access the parser to populate defaults
     cmd.send(:build_option_parser)
 
-    assert_equal Sift::Queue::DEFAULT_PATH, cmd.options[:queue_path]
-    assert_equal "sonnet", cmd.options[:model]
-    assert_equal 5, cmd.options[:concurrency]
+    assert_equal "sonnet", cmd.config.agent_model
+    assert_equal 5, cmd.config.concurrency
+    refute cmd.config.dry?
   end
 
   def test_custom_queue_path
     cmd = Sift::CLI::SiftCommand.new(["--queue", "/tmp/q.jsonl"])
     cmd.send(:build_option_parser).parse!(cmd.argv)
 
-    assert_equal "/tmp/q.jsonl", cmd.options[:queue_path]
+    assert_equal "/tmp/q.jsonl", cmd.config.queue_path
   end
 
   def test_custom_model
     cmd = Sift::CLI::SiftCommand.new(["--model", "opus"])
     cmd.send(:build_option_parser).parse!(cmd.argv)
 
-    assert_equal "opus", cmd.options[:model]
+    assert_equal "opus", cmd.config.agent_model
   end
 
   def test_dry_flag
     cmd = Sift::CLI::SiftCommand.new(["--dry"])
     cmd.send(:build_option_parser).parse!(cmd.argv)
 
-    assert cmd.options[:dry]
+    assert cmd.config.dry?
   end
 
   def test_custom_concurrency
     cmd = Sift::CLI::SiftCommand.new(["--concurrency", "3"])
     cmd.send(:build_option_parser).parse!(cmd.argv)
 
-    assert_equal 3, cmd.options[:concurrency]
+    assert_equal 3, cmd.config.concurrency
   end
 
   def test_custom_concurrency_short_flag
     cmd = Sift::CLI::SiftCommand.new(["-c", "10"])
     cmd.send(:build_option_parser).parse!(cmd.argv)
 
-    assert_equal 10, cmd.options[:concurrency]
+    assert_equal 10, cmd.config.concurrency
   end
 
   def test_system_prompt_flag
@@ -89,7 +88,7 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     cmd = Sift::CLI::SiftCommand.new(["--system-prompt", tmpfile.path])
     cmd.send(:build_option_parser).parse!(cmd.argv)
 
-    assert_equal tmpfile.path, cmd.options[:system_prompt_path]
+    assert_equal "You are a code reviewer.", cmd.config.agent_system_prompt
   ensure
     tmpfile&.unlink
   end
@@ -102,7 +101,7 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     cmd = Sift::CLI::SiftCommand.new(["-s", tmpfile.path])
     cmd.send(:build_option_parser).parse!(cmd.argv)
 
-    assert_equal tmpfile.path, cmd.options[:system_prompt_path]
+    assert_equal "You are a code reviewer.", cmd.config.agent_system_prompt
   ensure
     tmpfile&.unlink
   end
@@ -129,7 +128,8 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     exit_code, _out, err = run_command(["--system-prompt", "/nonexistent/prompt.md"])
 
     assert_equal 1, exit_code
-    assert_includes err, "system prompt file not found"
+    assert_includes err, "file not found"
+    assert_includes err, "/nonexistent/prompt.md"
   end
 
   def test_invalid_flag_returns_error
