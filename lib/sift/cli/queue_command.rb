@@ -27,7 +27,8 @@ module Sift
       register_subcommand Queue::Rm, category: :additional
 
       def define_flags(parser, options)
-        options[:queue_path] ||= ENV.fetch("SIFT_QUEUE_PATH", Sift::Queue::DEFAULT_PATH)
+        @config = Sift::Config.load
+        options[:queue_path] ||= @config.queue_path
         parser.on("-q", "--queue PATH", "Path to queue file") { |v| options[:queue_path] = v }
         super
       end

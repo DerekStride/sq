@@ -10,10 +10,11 @@ module Sift
   class ReviewLoop
     AGENT_DOCS_DIR = File.expand_path("../../../agent-docs", __FILE__)
 
-    def initialize(queue:, model: "sonnet", dry: false, concurrency: 5, system_prompt: nil)
-      @queue = queue
-      @client = dry ? DryClient.new(model: model) : Client.new(model: model, system_prompt: system_prompt)
-      @concurrency = concurrency
+    def initialize(config:)
+      @config = config
+      @queue = Queue.new(config.queue_path)
+      @client = config.dry? ? DryClient.new(model: config.agent_model) : Client.new(model: config.agent_model, system_prompt: config.agent_system_prompt)
+      @concurrency = config.concurrency
     end
 
     def run
