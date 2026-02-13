@@ -28,7 +28,7 @@ module QueueTestHelper
           old_stdin = $stdin
           $stdin = StringIO.new(stdin_content)
         end
-        cmd = Sift::CLI::QueueCommand.new(args, queue_path: @queue_path)
+        cmd = Sift::CLI::QueueCommand.new(["--queue", @queue_path] + args)
         exit_code = cmd.run
       ensure
         $stdin = old_stdin if stdin_content

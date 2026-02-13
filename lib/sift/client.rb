@@ -6,7 +6,7 @@ require "open3"
 module Sift
   # Client for calling Claude CLI and managing sessions
   class Client
-    class Error < StandardError; end
+    class Error < Sift::Error; end
 
     Result = Struct.new(:response, :session_id, :raw, keyword_init: true)
 

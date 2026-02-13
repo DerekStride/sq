@@ -8,7 +8,9 @@ require "sift/log"
 module Sift
   # Persistent queue for review items stored as JSONL
   class Queue
-    class Error < StandardError; end
+    class Error < Sift::Error; end
+
+    DEFAULT_PATH = ".sift/queue.jsonl"
 
     # Source types for queue items
     VALID_SOURCE_TYPES = %w[diff file text].freeze

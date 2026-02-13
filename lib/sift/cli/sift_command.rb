@@ -15,11 +15,11 @@ module Sift
       )
 
       def define_flags(parser, options)
-        options[:queue_path] ||= ENV.fetch("SIFT_QUEUE_PATH", DEFAULT_QUEUE_PATH)
+        options[:queue_path] ||= ENV.fetch("SIFT_QUEUE_PATH", Sift::Queue::DEFAULT_PATH)
         options[:model] ||= "sonnet"
         options[:concurrency] ||= 5
 
-        parser.on("-q", "--queue PATH", "Queue file path (default: #{DEFAULT_QUEUE_PATH})") do |v|
+        parser.on("-q", "--queue PATH", "Queue file path (default: #{Sift::Queue::DEFAULT_PATH})") do |v|
           options[:queue_path] = v
         end
         parser.on("-m", "--model MODEL", "Claude model (default: sonnet)") do |v|
@@ -42,7 +42,12 @@ module Sift
       end
 
       def execute
-        system_prompt = read_system_prompt(options[:system_prompt_path])
+        if options[:system_prompt_path] && !File.exist?(options[:system_prompt_path])
+          logger.error("system prompt file not found: #{options[:system_prompt_path]}")
+          return 1
+        end
+
+        system_prompt = options[:system_prompt_path] ? File.read(options[:system_prompt_path]) : nil
         queue = Sift::Queue.new(options[:queue_path])
         Sift::ReviewLoop.new(
           queue: queue,
@@ -52,19 +57,6 @@ module Sift
           system_prompt: system_prompt,
         ).run
         0
-      end
-
-      private
-
-      def read_system_prompt(path)
-        return nil unless path
-
-        unless File.exist?(path)
-          logger.error("system prompt file not found: #{path}")
-          exit 1
-        end
-
-        File.read(path)
       end
     end
   end

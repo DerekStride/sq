@@ -41,7 +41,7 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     # Access the parser to populate defaults
     cmd.send(:build_option_parser)
 
-    assert_equal Sift::CLI::DEFAULT_QUEUE_PATH, cmd.options[:queue_path]
+    assert_equal Sift::Queue::DEFAULT_PATH, cmd.options[:queue_path]
     assert_equal "sonnet", cmd.options[:model]
     assert_equal 5, cmd.options[:concurrency]
   end
@@ -125,14 +125,10 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     assert_includes out, "--concurrency"
   end
 
-  def test_system_prompt_missing_file_exits_with_error
-    _out, err = capture_io do
-      Sift::Log.reset!
-      assert_raises(SystemExit) do
-        Sift::CLI::SiftCommand.new(["--system-prompt", "/nonexistent/prompt.md"]).run
-      end
-    end
+  def test_system_prompt_missing_file_returns_error
+    exit_code, _out, err = run_command(["--system-prompt", "/nonexistent/prompt.md"])
 
+    assert_equal 1, exit_code
     assert_includes err, "system prompt file not found"
   end
 

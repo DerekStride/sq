@@ -52,7 +52,7 @@ module Sift
       rescue OptionParser::ParseError => e
         logger.error(e.message)
         1
-      rescue Sift::Queue::Error => e
+      rescue Sift::Error => e
         logger.error(e.message)
         1
       end

@@ -8,6 +8,5 @@ require_relative "cli/sift_command"
 module Sift
   # CLI module for command-line interface components
   module CLI
-    DEFAULT_QUEUE_PATH = ".sift/queue.jsonl"
   end
 end

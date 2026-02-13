@@ -26,14 +26,9 @@ module Sift
       register_subcommand Queue::Edit, category: :additional
       register_subcommand Queue::Rm, category: :additional
 
-      def initialize(argv, parent: nil, queue_path: nil)
-        super(argv, parent: parent)
-        @default_queue_path = queue_path
-      end
-
       def define_flags(parser, options)
-        options[:queue_path] ||= @default_queue_path || DEFAULT_QUEUE_PATH
-        parser.on("--queue-path PATH", "Path to queue file") { |v| options[:queue_path] = v }
+        options[:queue_path] ||= ENV.fetch("SIFT_QUEUE_PATH", Sift::Queue::DEFAULT_PATH)
+        parser.on("-q", "--queue PATH", "Path to queue file") { |v| options[:queue_path] = v }
         super
       end
     end
