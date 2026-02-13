@@ -40,6 +40,7 @@ module Sift
     def enable
       return if @enabled
       return unless @tty
+      return unless $stdout.respond_to?(:tty?) && $stdout.tty?
 
       @enabled = true
       apply_scroll_region

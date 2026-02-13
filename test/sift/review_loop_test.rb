@@ -499,12 +499,14 @@ class Sift::ReviewLoopTest < Minitest::Test
   def stub_read_char(*chars)
     chars = chars.flatten
     index = 0
-    ::CLI::UI::Prompt.stub(:read_char, -> {
-      char = chars[index] || "q"
-      index += 1
-      char
-    }) do
-      yield
+    $stdin.stub(:tty?, false) do
+      ::CLI::UI::Prompt.stub(:read_char, -> {
+        char = chars[index] || "q"
+        index += 1
+        char
+      }) do
+        yield
+      end
     end
   end
 end

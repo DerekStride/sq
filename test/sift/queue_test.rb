@@ -3,6 +3,7 @@
 require "test_helper"
 require "tmpdir"
 require "fileutils"
+require "timeout"
 
 class Sift::QueueTest < Minitest::Test
   include TestHelpers
@@ -358,7 +359,7 @@ class Sift::QueueTest < Minitest::Test
     item = @queue.push(sources: [{ type: "text", content: "test" }])
     original_updated = item.updated_at
 
-    sleep 1.1 # ensure time difference (iso8601 has second precision)
+    sleep 0.01 # ensure millisecond-precision timestamp differs
     updated = @queue.update(item.id, status: "closed")
 
     refute_equal original_updated, updated.updated_at
@@ -707,8 +708,8 @@ class Sift::QueueTest < Minitest::Test
     result2 = r2.gets&.strip
     r1.close; r2.close
 
-    Process.waitpid(pid1)
-    Process.waitpid(pid2)
+    Timeout.timeout(5) { Process.waitpid(pid1) }
+    Timeout.timeout(5) { Process.waitpid(pid2) }
 
     results = [result1, result2].sort
     assert_equal ["claimed", "nil"], results, "Exactly one process should claim the item"
@@ -730,7 +731,7 @@ class Sift::QueueTest < Minitest::Test
       end
     end
 
-    pids.each { |pid| Process.waitpid(pid) }
+    pids.each { |pid| Timeout.timeout(5) { Process.waitpid(pid) } }
 
     items = @queue.all
     assert_equal num_processes * items_per_process, items.length,
@@ -763,7 +764,7 @@ class Sift::QueueTest < Minitest::Test
       end
     end
 
-    pids.each { |pid| Process.waitpid(pid) }
+    pids.each { |pid| Timeout.timeout(5) { Process.waitpid(pid) } }
 
     items = @queue.all
     assert_equal 15, items.length, "Should have 5 initial + 10 new items"
@@ -792,7 +793,7 @@ class Sift::QueueTest < Minitest::Test
       queue.remove(to_remove.id)
     end
 
-    pids.each { |pid| Process.waitpid(pid) }
+    pids.each { |pid| Timeout.timeout(5) { Process.waitpid(pid) } }
 
     items = @queue.all
     assert_equal 10, items.length, "Should have exactly 10 items (removed one)"
@@ -835,8 +836,8 @@ class Sift::QueueTest < Minitest::Test
     r1.close
     r2.close
 
-    Process.waitpid(pid1)
-    Process.waitpid(pid2)
+    Timeout.timeout(5) { Process.waitpid(pid1) }
+    Timeout.timeout(5) { Process.waitpid(pid2) }
 
     assert_equal "1", result1&.strip
     assert_equal "1", result2&.strip

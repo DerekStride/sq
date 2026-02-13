@@ -122,7 +122,7 @@ module Sift
       with_exclusive_lock do |f|
         existing_ids = read_items(f).map(&:id).to_set
 
-        now = Time.now.utc.iso8601
+        now = Time.now.utc.iso8601(3)
         item = Item.new(
           id: generate_id(existing_ids),
           status: "pending",
@@ -164,7 +164,7 @@ module Sift
         end
 
         # Update fields
-        attrs[:updated_at] = Time.now.utc.iso8601
+        attrs[:updated_at] = Time.now.utc.iso8601(3)
         updated_item = Item.new(**item.to_h.merge(attrs))
         items[index] = updated_item
 
@@ -231,7 +231,7 @@ module Sift
         return nil unless index
 
         updated = Item.new(**items[index].to_h.merge(
-          status: "in_progress", updated_at: Time.now.utc.iso8601
+          status: "in_progress", updated_at: Time.now.utc.iso8601(3)
         ))
         items[index] = updated
         rewrite_items(f, items)
@@ -265,7 +265,7 @@ module Sift
         return nil unless index
 
         updated = Item.new(**items[index].to_h.merge(
-          status: "pending", updated_at: Time.now.utc.iso8601
+          status: "pending", updated_at: Time.now.utc.iso8601(3)
         ))
         items[index] = updated
         rewrite_items(f, items)
