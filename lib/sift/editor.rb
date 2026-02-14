@@ -23,6 +23,8 @@ module Sift
 
       cmd = editor_command
       system(*cmd, *paths)
+    ensure
+      system("stty", "sane", err: File::NULL)
     end
 
     def resolve_editor

@@ -246,8 +246,12 @@ module Sift
     end
 
     def handle_view(item)
+      @statusline&.disable
       editor = Editor.new(sources: item.sources, item_id: item.id, session_id: item.session_id)
       editor.open
+    ensure
+      @statusline&.enable
+      refresh_statusline
     end
 
     def handle_general_agent
