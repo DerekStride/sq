@@ -15,6 +15,7 @@ module Sift
       @queue = Queue.new(config.queue_path)
       @client = config.dry? ? DryClient.new(config: config) : Client.new(config: config)
       @concurrency = config.concurrency
+      @git = Git.new
     end
 
     def run
@@ -323,7 +324,13 @@ module Sift
         item = @queue.find(item_id)
         return unless item
 
-        @queue.update(item_id, session_id: result.session_id)
+        updates = { session_id: result.session_id }
+
+        if item.worktree
+          updates[:sources] = add_worktree_sources(item)
+        end
+
+        @queue.update(item_id, **updates)
         puts ::CLI::UI.fmt("\n{{blue:Agent finished for item #{item_id}}}")
       else
         item = @queue.find(item_id)
@@ -361,6 +368,25 @@ module Sift
     def handle_close(item)
       @queue.update(item.id, status: "closed")
       refresh_statusline
+    end
+
+    # Build updated sources list with auto-diff and directory entries.
+    def add_worktree_sources(item)
+      base = @config.worktree_base_branch
+      sources = item.sources.map(&:to_h)
+
+      if @git.has_commits_beyond?(item.worktree.branch, base)
+        diff_content = @git.diff(base, item.worktree.branch)
+        entry = { type: "diff", path: "worktree", content: diff_content }
+        idx = sources.index { |s| s[:type] == "diff" && s[:path] == "worktree" }
+        idx ? sources[idx] = entry : sources << entry
+      end
+
+      unless sources.any? { |s| s[:type] == "directory" && s[:path] == item.worktree.path }
+        sources << { type: "directory", path: item.worktree.path }
+      end
+
+      sources.map { |s| Queue::Source.from_h(s) }
     end
 
     def warn_stale_items

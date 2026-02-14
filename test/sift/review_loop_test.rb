@@ -592,6 +592,149 @@ class Sift::ReviewLoopTest < Minitest::Test
     refute worktree_created, "General agent should not create worktree"
   end
 
+  # --- post-agent worktree source capture ---
+
+  def test_completed_agent_adds_diff_and_directory_sources
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    wt = Sift::Queue::Worktree.new(path: ".sift/worktrees/abc", branch: "sift/abc")
+    @queue.update(item.id, worktree: wt)
+
+    mock_git = Object.new
+    mock_git.define_singleton_method(:has_commits_beyond?) { |_b, _base| true }
+    mock_git.define_singleton_method(:diff) { |_base, _b| "+added line\n" }
+
+    rl = Sift::ReviewLoop.new(config: build_config)
+    rl.instance_variable_set(:@git, mock_git)
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+      rl.instance_variable_set(:@agent_runner, runner)
+
+      runner.spawn(item.id, "prompt", "prompt")
+      task.yield
+
+      capture_cli_ui_output { rl.send(:process_completed_agents) }
+
+      updated = @queue.find(item.id)
+      types = updated.sources.map(&:type)
+      assert_includes types, "diff"
+      assert_includes types, "directory"
+
+      diff_src = updated.sources.find { |s| s.type == "diff" && s.path == "worktree" }
+      assert_includes diff_src.content, "+added line"
+
+      dir_src = updated.sources.find { |s| s.type == "directory" }
+      assert_equal ".sift/worktrees/abc", dir_src.path
+    end
+  end
+
+  def test_completed_agent_adds_only_directory_when_no_commits
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    wt = Sift::Queue::Worktree.new(path: ".sift/worktrees/abc", branch: "sift/abc")
+    @queue.update(item.id, worktree: wt)
+
+    mock_git = Object.new
+    mock_git.define_singleton_method(:has_commits_beyond?) { |_b, _base| false }
+
+    rl = Sift::ReviewLoop.new(config: build_config)
+    rl.instance_variable_set(:@git, mock_git)
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+      rl.instance_variable_set(:@agent_runner, runner)
+
+      runner.spawn(item.id, "prompt", "prompt")
+      task.yield
+
+      capture_cli_ui_output { rl.send(:process_completed_agents) }
+
+      updated = @queue.find(item.id)
+      types = updated.sources.map(&:type)
+      refute_includes types, "diff"
+      assert_includes types, "directory"
+    end
+  end
+
+  def test_completed_agent_no_sources_without_worktree
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+
+    rl = Sift::ReviewLoop.new(config: build_config)
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+      rl.instance_variable_set(:@agent_runner, runner)
+
+      runner.spawn(item.id, "prompt", "prompt")
+      task.yield
+
+      capture_cli_ui_output { rl.send(:process_completed_agents) }
+
+      updated = @queue.find(item.id)
+      assert_equal 1, updated.sources.size
+      assert_equal "text", updated.sources.first.type
+    end
+  end
+
+  def test_completed_agent_replaces_existing_auto_diff
+    item = @queue.push(sources: [
+      { type: "text", content: "test" },
+      { type: "diff", path: "worktree", content: "old diff" },
+    ])
+    wt = Sift::Queue::Worktree.new(path: ".sift/worktrees/abc", branch: "sift/abc")
+    @queue.update(item.id, worktree: wt)
+
+    mock_git = Object.new
+    mock_git.define_singleton_method(:has_commits_beyond?) { |_b, _base| true }
+    mock_git.define_singleton_method(:diff) { |_base, _b| "+new diff\n" }
+
+    rl = Sift::ReviewLoop.new(config: build_config)
+    rl.instance_variable_set(:@git, mock_git)
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+      rl.instance_variable_set(:@agent_runner, runner)
+
+      runner.spawn(item.id, "prompt", "prompt")
+      task.yield
+
+      capture_cli_ui_output { rl.send(:process_completed_agents) }
+
+      updated = @queue.find(item.id)
+      diff_sources = updated.sources.select { |s| s.type == "diff" }
+      assert_equal 1, diff_sources.size
+      assert_includes diff_sources.first.content, "+new diff"
+    end
+  end
+
+  def test_completed_agent_does_not_duplicate_directory_source
+    item = @queue.push(sources: [
+      { type: "text", content: "test" },
+      { type: "directory", path: ".sift/worktrees/abc" },
+    ])
+    wt = Sift::Queue::Worktree.new(path: ".sift/worktrees/abc", branch: "sift/abc")
+    @queue.update(item.id, worktree: wt)
+
+    mock_git = Object.new
+    mock_git.define_singleton_method(:has_commits_beyond?) { |_b, _base| false }
+
+    rl = Sift::ReviewLoop.new(config: build_config)
+    rl.instance_variable_set(:@git, mock_git)
+
+    Sync do |task|
+      runner = Sift::AgentRunner.new(client: Sift::DryClient.new, task: task)
+      rl.instance_variable_set(:@agent_runner, runner)
+
+      runner.spawn(item.id, "prompt", "prompt")
+      task.yield
+
+      capture_cli_ui_output { rl.send(:process_completed_agents) }
+
+      updated = @queue.find(item.id)
+      dir_sources = updated.sources.select { |s| s.type == "directory" }
+      assert_equal 1, dir_sources.size
+    end
+  end
+
   private
 
   def build_config(dry: true, **overrides)
