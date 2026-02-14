@@ -3,37 +3,7 @@
 require "test_helper"
 require "tmpdir"
 require "fileutils"
-
-class FakeGit
-  attr_reader :worktrees_added, :configs_set
-
-  def initialize(branch_exists: true)
-    @branch_exists = branch_exists
-    @worktrees_added = []
-    @configs_set = []
-  end
-
-  def branch_exists?(_name)
-    @branch_exists
-  end
-
-  def add_worktree(branch:, path:, start_point:)
-    @worktrees_added << { branch: branch, path: path, start_point: start_point }
-    FileUtils.mkdir_p(path)
-  end
-
-  def worktree_valid?(path)
-    Dir.exist?(path)
-  end
-
-  def enable_worktree_config
-    # no-op
-  end
-
-  def set_worktree_config(worktree_path, key, value)
-    @configs_set << { path: worktree_path, key: key, value: value }
-  end
-end
+require "support/fake_git"
 
 class Sift::WorktreeTest < Minitest::Test
   def setup

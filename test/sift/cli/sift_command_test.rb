@@ -37,12 +37,15 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
   end
 
   def test_default_config_values
-    cmd = Sift::CLI::SiftCommand.new([])
-    cmd.send(:build_option_parser)
+    defaults_only = Sift::Config.load(project_path: "/nonexistent", user_path: "/nonexistent")
+    Sift::Config.stub(:load, defaults_only) do
+      cmd = Sift::CLI::SiftCommand.new([])
+      cmd.send(:build_option_parser)
 
-    assert_equal "sonnet", cmd.config.agent_model
-    assert_equal 5, cmd.config.concurrency
-    refute cmd.config.dry?
+      assert_equal "sonnet", cmd.config.agent_model
+      assert_equal 5, cmd.config.concurrency
+      refute cmd.config.dry?
+    end
   end
 
   def test_custom_queue_path

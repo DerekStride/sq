@@ -39,6 +39,11 @@ Other supporting modules (statusline, editor, session transcript parsing, etc.) 
 bundle exec rake test
 ```
 
+## Testing Rules
+
+- **No real git commands in tests.** Never call `system("git ...")` or execute git via `Open3` in test code. Use `FakeGit` (defined in `test/support/fake_git.rb`) for all git interactions. It supports configurable behavior via constructor kwargs.
+- **Isolate config from the environment.** Tests must not depend on `.sift/config.yml` or `~/.config/sift/config.yml`. Use `Config.load(project_path: "/nonexistent", user_path: "/nonexistent")` for defaults-only config, or stub `Config.load`.
+
 ## CLI Entry Points
 
 Two executables in `exe/`:
