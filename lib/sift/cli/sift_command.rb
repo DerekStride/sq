@@ -11,7 +11,6 @@ module Sift
         "sift init",
         "sift --queue .sift/queue.jsonl",
         "sift --model opus",
-        "sift --system-prompt prompts/review.md",
         "sift --dry"
       )
 
@@ -30,9 +29,6 @@ module Sift
         end
         parser.on("-c", "--concurrency N", Integer, "Max concurrent agents (default: 5)") do |v|
           @config.concurrency = v
-        end
-        parser.on("-s", "--system-prompt PATH", "System prompt file for agent invocations") do |v|
-          @config.agent_system_prompt = v
         end
         parser.on("--dry", "Dry mode: skip Claude API calls, print prompts instead") do
           @config.dry = true

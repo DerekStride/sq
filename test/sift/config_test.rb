@@ -13,7 +13,6 @@ class Sift::ConfigTest < Minitest::Test
     assert_equal [], config.agent_flags
     assert_equal [], config.agent_allowed_tools
     assert_equal "sonnet", config.agent_model
-    assert_nil config.agent_system_prompt
     assert_nil config.worktree_setup_command
     assert_equal "main", config.worktree_base_branch
     assert_equal Sift::Queue::DEFAULT_PATH, config.queue_path
@@ -21,10 +20,8 @@ class Sift::ConfigTest < Minitest::Test
     refute config.dry?
   end
 
-  def test_load_from_file_reads_system_prompt_content
+  def test_load_from_file_reads_all_settings
     with_config_dir do |dir|
-      prompt_path = File.join(dir, "review.md")
-      File.write(prompt_path, "You are a reviewer.")
       config_path = File.join(dir, "config.yml")
       File.write(config_path, <<~YAML)
         agent:
@@ -32,7 +29,6 @@ class Sift::ConfigTest < Minitest::Test
           flags: ['--dangerously-skip-permissions']
           allowed_tools: [Edit, Write, Bash]
           model: opus
-          system_prompt: #{prompt_path}
         worktree:
           setup_command: dev up
           base_branch: develop
@@ -46,20 +42,10 @@ class Sift::ConfigTest < Minitest::Test
       assert_equal ["--dangerously-skip-permissions"], config.agent_flags
       assert_equal ["Edit", "Write", "Bash"], config.agent_allowed_tools
       assert_equal "opus", config.agent_model
-      assert_equal "You are a reviewer.", config.agent_system_prompt
       assert_equal "dev up", config.worktree_setup_command
       assert_equal "develop", config.worktree_base_branch
       assert_equal "custom/queue.jsonl", config.queue_path
       assert_equal 3, config.concurrency
-    end
-  end
-
-  def test_load_raises_on_missing_system_prompt_file
-    with_config_file("agent:\n  system_prompt: /nonexistent/prompt.md") do |path|
-      error = assert_raises(Sift::Config::FileNotFound) do
-        Sift::Config.load(project_path: path, user_path: "/nonexistent/user.yml")
-      end
-      assert_includes error.message, "/nonexistent/prompt.md"
     end
   end
 
@@ -79,7 +65,6 @@ class Sift::ConfigTest < Minitest::Test
       assert_equal "claude", config.agent_command
       assert_equal [], config.agent_flags
       assert_equal [], config.agent_allowed_tools
-      assert_nil config.agent_system_prompt
       assert_nil config.worktree_setup_command
       assert_equal "main", config.worktree_base_branch
       assert_equal Sift::Queue::DEFAULT_PATH, config.queue_path
@@ -112,28 +97,6 @@ class Sift::ConfigTest < Minitest::Test
     config.agent_model = "opus"
 
     assert_equal "opus", config.agent_model
-  end
-
-  def test_agent_system_prompt_setter_reads_file_content
-    tmpfile = Tempfile.new(["sp-", ".md"])
-    tmpfile.write("You are a reviewer.")
-    tmpfile.close
-
-    config = Sift::Config.new
-    config.agent_system_prompt = tmpfile.path
-
-    assert_equal "You are a reviewer.", config.agent_system_prompt
-  ensure
-    tmpfile&.unlink
-  end
-
-  def test_agent_system_prompt_setter_raises_on_missing_file
-    config = Sift::Config.new
-
-    error = assert_raises(Sift::Config::FileNotFound) do
-      config.agent_system_prompt = "/nonexistent/prompt.md"
-    end
-    assert_includes error.message, "/nonexistent/prompt.md"
   end
 
   def test_queue_path_setter
@@ -307,18 +270,6 @@ class Sift::ConfigTest < Minitest::Test
     with_env("XDG_CONFIG_HOME" => nil) do
       expected = File.join(Dir.home, ".config", "sift", "config.yml")
       assert_equal expected, Sift::Config.default_user_path
-    end
-  end
-
-  def test_user_config_bad_system_prompt_raises
-    with_config_dir do |dir|
-      user_path = File.join(dir, "user.yml")
-      File.write(user_path, "agent:\n  system_prompt: /nonexistent/prompt.md")
-
-      error = assert_raises(Sift::Config::FileNotFound) do
-        Sift::Config.load(project_path: "/nonexistent/project.yml", user_path: user_path)
-      end
-      assert_includes error.message, "/nonexistent/prompt.md"
     end
   end
 

@@ -34,7 +34,6 @@ class Sift::CLI::InitTest < Minitest::Test
     assert_includes content, "agent:"
     assert_includes content, "command: claude"
     assert_includes content, "model: sonnet"
-    assert_includes content, "system_prompt:"
     assert_includes content, "worktree:"
     assert_includes content, "base_branch: main"
     assert_includes content, "queue_path:"

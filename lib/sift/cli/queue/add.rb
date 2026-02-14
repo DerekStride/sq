@@ -39,10 +39,6 @@ module Sift
             options[:stdin_type] = type
           end
 
-          parser.on("--system-prompt PATH", "Attach a system prompt file to this item") do |path|
-            options[:system_prompt] = path
-          end
-
           parser.on("--title TITLE", "Title for the item") do |title|
             options[:title] = title
           end
@@ -67,7 +63,6 @@ module Sift
           end
 
           metadata = options[:metadata]
-          metadata["system_prompt"] = options[:system_prompt] if options[:system_prompt]
 
           item = queue.push(sources: options[:sources], title: options[:title], metadata: metadata)
           puts item.id

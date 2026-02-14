@@ -80,38 +80,6 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     assert_equal 10, cmd.config.concurrency
   end
 
-  def test_system_prompt_flag
-    tmpfile = Tempfile.new(["sp-", ".md"])
-    tmpfile.write("You are a code reviewer.")
-    tmpfile.close
-
-    cmd = Sift::CLI::SiftCommand.new(["--system-prompt", tmpfile.path])
-    cmd.send(:build_option_parser).parse!(cmd.argv)
-
-    assert_equal "You are a code reviewer.", cmd.config.agent_system_prompt
-  ensure
-    tmpfile&.unlink
-  end
-
-  def test_system_prompt_short_flag
-    tmpfile = Tempfile.new(["sp-", ".md"])
-    tmpfile.write("You are a code reviewer.")
-    tmpfile.close
-
-    cmd = Sift::CLI::SiftCommand.new(["-s", tmpfile.path])
-    cmd.send(:build_option_parser).parse!(cmd.argv)
-
-    assert_equal "You are a code reviewer.", cmd.config.agent_system_prompt
-  ensure
-    tmpfile&.unlink
-  end
-
-  def test_help_includes_system_prompt_flag
-    _exit_code, out, _err = run_command(["--help"])
-
-    assert_includes out, "--system-prompt"
-  end
-
   def test_help_includes_dry_flag
     _exit_code, out, _err = run_command(["--help"])
 
@@ -122,14 +90,6 @@ class Sift::CLI::SiftCommandTest < Minitest::Test
     _exit_code, out, _err = run_command(["--help"])
 
     assert_includes out, "--concurrency"
-  end
-
-  def test_system_prompt_missing_file_returns_error
-    exit_code, _out, err = run_command(["--system-prompt", "/nonexistent/prompt.md"])
-
-    assert_equal 1, exit_code
-    assert_includes err, "file not found"
-    assert_includes err, "/nonexistent/prompt.md"
   end
 
   def test_invalid_flag_returns_error

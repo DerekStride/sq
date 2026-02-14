@@ -43,10 +43,6 @@ module Sift
             options[:status] = status
           end
 
-          parser.on("--set-system-prompt PATH", "Set system prompt file path") do |path|
-            options[:system_prompt] = path
-          end
-
           parser.on("--set-title TITLE", "Set title for the item") do |title|
             options[:title] = title
           end
@@ -75,12 +71,6 @@ module Sift
           attrs[:status] = options[:status] if options[:status]
           attrs[:title] = options[:title] if options.key?(:title)
           attrs[:metadata] = options[:metadata] if options[:metadata]
-
-          if options[:system_prompt]
-            metadata = attrs[:metadata] || item.metadata.dup
-            metadata["system_prompt"] = options[:system_prompt]
-            attrs[:metadata] = metadata
-          end
 
           if options[:add_sources].any? || options[:rm_sources].any?
             sources = item.sources.map(&:to_h)

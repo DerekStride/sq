@@ -20,7 +20,6 @@ module Sift
         #   flags: []                # Additional CLI flags passed to agent
         #   allowed_tools: []        # Restrict agent to these tools
         #   model: sonnet            # Claude model (sonnet, opus, haiku)
-        #   system_prompt:           # Path to system prompt file
 
         # worktree:
         #   setup_command:           # Command to run when setting up worktree
