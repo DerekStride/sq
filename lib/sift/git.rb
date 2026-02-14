@@ -33,6 +33,17 @@ module Sift
       run("-C", worktree_path, "config", "--worktree", key, value)
     end
 
+    # Does branch have commits not present in base?
+    def has_commits_beyond?(branch, base)
+      out, _, status = Open3.capture3("git", "rev-list", "--count", "#{base}..#{branch}")
+      status.success? && out.strip.to_i > 0
+    end
+
+    # Return diff between base and branch.
+    def diff(base, branch)
+      run("diff", "#{base}..#{branch}")
+    end
+
     private
 
     def run(*args)
