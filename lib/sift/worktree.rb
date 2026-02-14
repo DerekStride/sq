@@ -59,9 +59,25 @@ module Sift
 
         git.enable_worktree_config
         git.set_worktree_config(worktree_path, "core.hooksPath", HOOKS_DIR_NAME)
+
+        add_to_git_exclude(HOOKS_DIR_NAME, git: git)
       end
 
       private
+
+      # Ensure pattern is listed in .git/info/exclude (idempotent).
+      def add_to_git_exclude(pattern, git: Git.new)
+        exclude_path = git.info_exclude_path
+        FileUtils.mkdir_p(File.dirname(exclude_path))
+
+        existing = File.exist?(exclude_path) ? File.read(exclude_path) : ""
+        return if existing.lines.any? { |line| line.strip == pattern }
+
+        File.open(exclude_path, "a") do |f|
+          f.puts unless existing.end_with?("\n") || existing.empty?
+          f.puts(pattern)
+        end
+      end
 
       def run_setup_command(command, wt_path)
         _, err, status = Open3.capture3(command, chdir: wt_path)

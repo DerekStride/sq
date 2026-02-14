@@ -2,6 +2,7 @@
 
 class FakeGit
   attr_reader :worktrees_added, :configs_set
+  attr_accessor :fake_git_common_dir
 
   def initialize(branch_exists: true, has_commits: false, worktree_dirty: false, diff_output: "")
     @branch_exists = branch_exists
@@ -10,6 +11,7 @@ class FakeGit
     @diff_output = diff_output
     @worktrees_added = []
     @configs_set = []
+    @fake_git_common_dir = ".git"
   end
 
   def branch_exists?(_name)
@@ -31,6 +33,10 @@ class FakeGit
 
   def set_worktree_config(worktree_path, key, value)
     @configs_set << { path: worktree_path, key: key, value: value }
+  end
+
+  def info_exclude_path
+    File.join(@fake_git_common_dir, "info", "exclude")
   end
 
   def has_commits_beyond?(_branch, _base)

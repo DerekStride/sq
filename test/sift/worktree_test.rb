@@ -122,6 +122,29 @@ class Sift::WorktreeTest < Minitest::Test
     assert_equal ".sift-hooks", config[:value]
   end
 
+  def test_install_hook_adds_sift_hooks_to_git_exclude
+    wt_path = File.join(@tmp_dir, "worktree")
+    FileUtils.mkdir_p(wt_path)
+
+    Sift::Worktree.install_hook(wt_path, "abc", git: @fake_git)
+
+    exclude_path = File.join(@tmp_dir, ".git", "info", "exclude")
+    assert File.exist?(exclude_path), "info/exclude should be created"
+    assert_includes File.read(exclude_path), ".sift-hooks"
+  end
+
+  def test_install_hook_git_exclude_is_idempotent
+    wt_path = File.join(@tmp_dir, "worktree")
+    FileUtils.mkdir_p(wt_path)
+
+    Sift::Worktree.install_hook(wt_path, "abc", git: @fake_git)
+    Sift::Worktree.install_hook(wt_path, "def", git: @fake_git)
+
+    exclude_path = File.join(@tmp_dir, ".git", "info", "exclude")
+    lines = File.read(exclude_path).lines.select { |l| l.strip == ".sift-hooks" }
+    assert_equal 1, lines.size, "should only appear once"
+  end
+
   # --- exists? ---
 
   def test_exists_returns_false_when_dir_does_not_exist

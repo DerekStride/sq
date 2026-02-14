@@ -33,6 +33,13 @@ module Sift
       run("-C", worktree_path, "config", "--worktree", key, value)
     end
 
+    # Return the path to .git/info/exclude (from the common git dir).
+    def info_exclude_path
+      out, _, status = Open3.capture3("git", "rev-parse", "--git-common-dir")
+      raise Error, "git rev-parse --git-common-dir failed" unless status.success?
+      File.join(out.strip, "info", "exclude")
+    end
+
     # Does branch have commits not present in base?
     def has_commits_beyond?(branch, base)
       out, _, status = Open3.capture3("git", "rev-list", "--count", "#{base}..#{branch}")
