@@ -37,61 +37,6 @@ class Sift::ReviewLoopTest < Minitest::Test
     assert_instance_of Sift::Client, client
   end
 
-  def test_initializes_with_system_prompt
-    tmpfile = Tempfile.new(["sp-", ".md"])
-    tmpfile.write("You are a reviewer.")
-    tmpfile.close
-
-    config = build_config(dry: false)
-    config.agent_system_prompt = tmpfile.path
-    rl = Sift::ReviewLoop.new(config: config)
-    client = rl.instance_variable_get(:@client)
-    client_config = client.instance_variable_get(:@config)
-    assert_equal "You are a reviewer.", client_config.agent_system_prompt
-  ensure
-    tmpfile&.unlink
-  end
-
-  # --- resolve_system_prompt tests ---
-
-  def test_resolve_system_prompt_reads_file_from_metadata
-    tmpfile = Tempfile.new(["sp-", ".md"])
-    tmpfile.write("You are a reviewer.")
-    tmpfile.close
-
-    item = @queue.push(
-      sources: [{ type: "text", content: "test" }],
-      metadata: { "system_prompt" => tmpfile.path },
-    )
-    rl = Sift::ReviewLoop.new(config: build_config)
-
-    result = rl.send(:resolve_system_prompt, item)
-    assert_equal "You are a reviewer.", result
-  ensure
-    tmpfile&.unlink
-  end
-
-  def test_resolve_system_prompt_returns_nil_without_metadata
-    item = @queue.push(sources: [{ type: "text", content: "test" }])
-    rl = Sift::ReviewLoop.new(config: build_config)
-
-    assert_nil rl.send(:resolve_system_prompt, item)
-  end
-
-  def test_resolve_system_prompt_returns_nil_for_missing_file
-    item = @queue.push(
-      sources: [{ type: "text", content: "test" }],
-      metadata: { "system_prompt" => "/nonexistent/prompt.md" },
-    )
-    rl = Sift::ReviewLoop.new(config: build_config)
-
-    _, stderr = with_log_level("WARN") do
-      capture_io { assert_nil rl.send(:resolve_system_prompt, item) }
-    end
-
-    assert_includes stderr, "system prompt file not found"
-  end
-
   # --- build_agent_prompt tests ---
 
   def test_build_agent_prompt_first_turn_includes_sources
@@ -314,17 +259,18 @@ class Sift::ReviewLoopTest < Minitest::Test
     end
   end
 
-  # --- general_agent_system_prompt tests ---
+  # --- agent_context tests ---
 
-  def test_general_agent_system_prompt_includes_queue_path
+  def test_agent_context_includes_general_doc_and_prime
     rl = Sift::ReviewLoop.new(config: build_config)
 
-    prompt = rl.send(:general_agent_system_prompt)
+    context = rl.send(:agent_context)
 
-    assert_includes prompt, "sift"
-    assert_includes prompt, @queue_path
-    assert_includes prompt, "sq --help"
-    refute_includes prompt, "{{queue_path}}"
+    assert_includes context, "sift"
+    assert_includes context, @queue_path
+    assert_includes context, "sq prime"
+    assert_includes context, "`sq` Commands"
+    refute_includes context, "{{queue_path}}"
   end
 
   # --- general agent key binding ---
@@ -382,7 +328,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_process_completed_general_agent_error_does_not_create_item
     error_client = Object.new
-    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+    error_client.define_singleton_method(:prompt) do |text, session_id: nil, append_system_prompt: nil, cwd: nil|
       raise Sift::Client::Error, "API error"
     end
 
@@ -405,7 +351,7 @@ class Sift::ReviewLoopTest < Minitest::Test
 
   def test_process_completed_agents_records_error_on_item
     error_client = Object.new
-    error_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+    error_client.define_singleton_method(:prompt) do |text, session_id: nil, append_system_prompt: nil, cwd: nil|
       raise Sift::Client::Error, "No conversation found with session ID: bad-id"
     end
 
@@ -488,7 +434,7 @@ class Sift::ReviewLoopTest < Minitest::Test
     spawned_cwd = nil
 
     mock_client = Object.new
-    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, append_system_prompt: nil, cwd: nil|
       spawned_cwd = cwd
       Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
     end
@@ -537,7 +483,7 @@ class Sift::ReviewLoopTest < Minitest::Test
     spawned_cwd = nil
 
     mock_client = Object.new
-    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, system_prompt: nil, cwd: nil|
+    mock_client.define_singleton_method(:prompt) do |text, session_id: nil, append_system_prompt: nil, cwd: nil|
       spawned_cwd = cwd
       Sift::Client::Result.new(response: "ok", session_id: "new-session", raw: {})
     end

@@ -19,7 +19,7 @@ module Sift
 
     # Spawn a background agent for the given item.
     # Returns immediately — the agent runs as a child fiber.
-    def spawn(item_id, prompt_text, user_prompt, session_id: nil, system_prompt: nil, cwd: nil)
+    def spawn(item_id, prompt_text, user_prompt, session_id: nil, append_system_prompt: nil, cwd: nil)
       Log.debug "agent spawn item=#{item_id} session=#{session_id || "new"} cwd=#{cwd || "(inherit)"} prompt=#{user_prompt.lines.first&.chomp}"
 
       agent_task = @semaphore.async do
@@ -27,10 +27,12 @@ module Sift
         if @queue
           @queue.claim(item_id) do |claimed_item|
             next nil unless claimed_item
-            @client.prompt(prompt_text, session_id: session_id, system_prompt: system_prompt, cwd: cwd)
+            @client.prompt(prompt_text, session_id: session_id,
+              append_system_prompt: append_system_prompt, cwd: cwd)
           end
         else
-          @client.prompt(prompt_text, session_id: session_id, system_prompt: system_prompt, cwd: cwd)
+          @client.prompt(prompt_text, session_id: session_id,
+            append_system_prompt: append_system_prompt, cwd: cwd)
         end
       rescue Client::Error => e
         Log.warn "agent error item=#{item_id}: #{e.message}"
@@ -42,7 +44,7 @@ module Sift
 
     # Spawn a general-purpose agent not tied to any queue item.
     # Returns immediately — the agent runs as a child fiber.
-    def spawn_general(prompt_text, user_prompt, system_prompt: nil)
+    def spawn_general(prompt_text, user_prompt, append_system_prompt: nil)
       @general_counter += 1
       key = format("_gen_%03d", @general_counter)
 
@@ -50,7 +52,7 @@ module Sift
 
       agent_task = @semaphore.async do
         Log.debug "agent running general key=#{key}"
-        @client.prompt(prompt_text, system_prompt: system_prompt)
+        @client.prompt(prompt_text, append_system_prompt: append_system_prompt)
       rescue Client::Error => e
         Log.warn "agent error general key=#{key}: #{e.message}"
         e

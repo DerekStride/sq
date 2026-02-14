@@ -105,44 +105,22 @@ class Sift::ClientBuildArgsTest < Minitest::Test
     assert_equal "Write", args[tool_indices[1] + 1]
   end
 
-  def test_build_args_includes_system_prompt
+  def test_build_args_includes_append_system_prompt
     config = Sift::Config.new
-    # Manually set the system prompt content (bypass file read)
-    config.instance_variable_set(:@agent_system_prompt, "You are a reviewer.")
+    client = Sift::Client.new(config: config)
+    args = client.send(:build_args, append_system_prompt: "Extra context here.")
+
+    assert_includes args, "--append-system-prompt"
+    idx = args.index("--append-system-prompt")
+    assert_equal "Extra context here.", args[idx + 1]
+  end
+
+  def test_build_args_excludes_append_system_prompt_when_nil
+    config = Sift::Config.new
     client = Sift::Client.new(config: config)
     args = client.send(:build_args)
 
-    assert_includes args, "--system-prompt"
-    idx = args.index("--system-prompt")
-    assert_equal "You are a reviewer.", args[idx + 1]
-  end
-
-  def test_build_args_excludes_system_prompt_when_nil
-    config = Sift::Config.new
-    client = Sift::Client.new(config: config)
-    args = client.send(:build_args)
-
-    refute_includes args, "--system-prompt"
-  end
-
-  def test_build_args_per_call_system_prompt_overrides_instance
-    config = Sift::Config.new
-    config.instance_variable_set(:@agent_system_prompt, "session default")
-    client = Sift::Client.new(config: config)
-    args = client.send(:build_args, system_prompt: "per-item override")
-
-    idx = args.index("--system-prompt")
-    assert_equal "per-item override", args[idx + 1]
-  end
-
-  def test_build_args_falls_back_to_instance_system_prompt
-    config = Sift::Config.new
-    config.instance_variable_set(:@agent_system_prompt, "session default")
-    client = Sift::Client.new(config: config)
-    args = client.send(:build_args, system_prompt: nil)
-
-    idx = args.index("--system-prompt")
-    assert_equal "session default", args[idx + 1]
+    refute_includes args, "--append-system-prompt"
   end
 
   def test_build_args_default_command_is_claude

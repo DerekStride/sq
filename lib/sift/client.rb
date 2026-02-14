@@ -15,10 +15,9 @@ module Sift
     end
 
     # Send a prompt to Claude, optionally resuming a session.
-    # system_prompt overrides the instance default when provided.
     # Returns Result with response text and session_id
-    def prompt(text, session_id: nil, system_prompt: nil, cwd: nil)
-      args = build_args(session_id:, system_prompt:)
+    def prompt(text, session_id: nil, append_system_prompt: nil, cwd: nil)
+      args = build_args(session_id:, append_system_prompt:)
       Log.debug "client start cmd=#{args.join(" ")} cwd=#{cwd || "(inherit)"}"
       start = Time.now
 
@@ -44,13 +43,12 @@ module Sift
 
     private
 
-    def build_args(session_id: nil, system_prompt: nil)
-      effective_prompt = system_prompt || @config.agent_system_prompt
+    def build_args(session_id: nil, append_system_prompt: nil)
       args = [@config.agent_command, "-p", "--output-format", "json"]
       args += @config.agent_flags if @config.agent_flags&.any?
       @config.agent_allowed_tools&.each { |tool| args += ["--allowedTools", tool] }
       args += ["--model", @config.agent_model] if @config.agent_model
-      args += ["--system-prompt", effective_prompt] if effective_prompt
+      args += ["--append-system-prompt", append_system_prompt] if append_system_prompt
       args += ["--resume", session_id] if session_id
       args
     end
@@ -88,7 +86,7 @@ module Sift
       @config = config
     end
 
-    def prompt(text, session_id: nil, system_prompt: nil, cwd: nil)
+    def prompt(text, session_id: nil, append_system_prompt: nil, cwd: nil)
       model = @config&.agent_model
       Sift::Log.debug "[dry] model=#{model || "default"} session=#{session_id || "new"} cwd=#{cwd || "(inherit)"}"
       Sift::Log.debug "[dry] prompt: #{text.lines.first&.chomp}"
