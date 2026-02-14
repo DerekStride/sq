@@ -10,18 +10,21 @@ module Sift
           status_color = status_color_code(item.status)
           source_types = item.sources.map(&:type).tally.map { |t, c| c > 1 ? "#{t}:#{c}" : t }.join(",")
 
+          title_part = item.title ? "  #{item.title}" : ""
+
           if cli_ui_available?
             puts ::CLI::UI.fmt(
-              "{{bold:#{item.id}}}  #{status_color}  {{gray:#{source_types}}}  {{gray:#{item.created_at}}}"
+              "{{bold:#{item.id}}}  #{status_color}#{title_part}  {{gray:#{source_types}}}  {{gray:#{item.created_at}}}"
             )
           else
-            puts "#{item.id}  [#{item.status}]  #{source_types}  #{item.created_at}"
+            puts "#{item.id}  [#{item.status}]#{title_part}  #{source_types}  #{item.created_at}"
           end
         end
 
         def print_item_detail(item)
           if cli_ui_available?
             ::CLI::UI::Frame.open("{{bold:Item #{item.id}}}", color: :blue) do
+              puts ::CLI::UI.fmt("{{bold:Title:}} #{item.title}") if item.title
               puts ::CLI::UI.fmt("{{bold:Status:}} #{status_color_code(item.status)}")
               puts ::CLI::UI.fmt("{{bold:Created:}} {{gray:#{item.created_at}}}")
               puts ::CLI::UI.fmt("{{bold:Updated:}} {{gray:#{item.updated_at}}}")
@@ -48,6 +51,7 @@ module Sift
             end
           else
             puts "Item: #{item.id}"
+            puts "Title: #{item.title}" if item.title
             puts "Status: #{item.status}"
             puts "Created: #{item.created_at}"
             puts "Updated: #{item.updated_at}"

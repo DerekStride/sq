@@ -92,6 +92,28 @@ class Sift::CLI::Queue::EditTest < Minitest::Test
     assert_equal "review", updated.metadata["workflow"]
   end
 
+  def test_edit_set_title
+    item = queue.push(sources: [{ type: "text", content: "test" }])
+
+    exit_code = run_command(["edit", item.id, "--set-title", "New title"])
+
+    assert_equal 0, exit_code
+
+    updated = queue.find(item.id)
+    assert_equal "New title", updated.title
+  end
+
+  def test_edit_set_title_on_item_with_existing_title
+    item = queue.push(sources: [{ type: "text", content: "test" }], title: "Old title")
+
+    exit_code = run_command(["edit", item.id, "--set-title", "Updated title"])
+
+    assert_equal 0, exit_code
+
+    updated = queue.find(item.id)
+    assert_equal "Updated title", updated.title
+  end
+
   def test_edit_without_changes_returns_error
     item = queue.push(sources: [{ type: "text", content: "test" }])
 

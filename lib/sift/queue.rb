@@ -55,7 +55,7 @@ module Sift
     end
 
     # Represents a queue item
-    Item = Struct.new(:id, :status, :sources, :metadata, :session_id, :worktree, :errors, :created_at, :updated_at, keyword_init: true) do
+    Item = Struct.new(:id, :title, :status, :sources, :metadata, :session_id, :worktree, :errors, :created_at, :updated_at, keyword_init: true) do
       def to_h
         h = {
           id: id,
@@ -66,6 +66,7 @@ module Sift
           created_at: created_at,
           updated_at: updated_at,
         }
+        h[:title] = title if title
         h[:worktree] = worktree.to_h if worktree
         h[:errors] = errors if errors && !errors.empty?
         h
@@ -84,6 +85,7 @@ module Sift
 
         new(
           id: hash["id"] || hash[:id],
+          title: hash["title"] || hash[:title],
           status: hash["status"] || hash[:status],
           sources: sources,
           metadata: hash["metadata"] || hash[:metadata] || {},
@@ -116,7 +118,7 @@ module Sift
 
     # Add a new item to the queue
     # Returns the created Item
-    def push(sources:, metadata: {}, session_id: nil)
+    def push(sources:, title: nil, metadata: {}, session_id: nil)
       validate_sources!(sources)
 
       with_exclusive_lock do |f|
@@ -125,6 +127,7 @@ module Sift
         now = Time.now.utc.iso8601(3)
         item = Item.new(
           id: generate_id(existing_ids),
+          title: title,
           status: "pending",
           sources: normalize_sources(sources),
           metadata: metadata,

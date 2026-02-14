@@ -238,6 +238,56 @@ class Sift::QueueTest < Minitest::Test
     assert_equal "sift/xyz", found.worktree.branch
   end
 
+  # --- Title field tests ---
+
+  def test_item_title_roundtrip
+    item = @queue.push(sources: [{ type: "text", content: "test" }], title: "Fix login bug")
+    reloaded = @queue.find(item.id)
+
+    assert_equal "Fix login bug", reloaded.title
+  end
+
+  def test_item_title_nil_by_default
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    reloaded = @queue.find(item.id)
+
+    assert_nil reloaded.title
+  end
+
+  def test_item_to_h_includes_title_when_present
+    source = Sift::Queue::Source.new(type: "text", content: "test")
+    item = Sift::Queue::Item.new(id: "abc", title: "My title", status: "pending", sources: [source])
+
+    assert_equal "My title", item.to_h[:title]
+  end
+
+  def test_item_to_h_omits_title_when_nil
+    source = Sift::Queue::Source.new(type: "text", content: "test")
+    item = Sift::Queue::Item.new(id: "abc", status: "pending", sources: [source])
+
+    refute item.to_h.key?(:title)
+  end
+
+  def test_item_from_h_with_title
+    hash = {
+      "id" => "abc",
+      "title" => "Fix bug",
+      "status" => "pending",
+      "sources" => [{ "type" => "text", "content" => "test" }],
+    }
+    item = Sift::Queue::Item.from_h(hash)
+
+    assert_equal "Fix bug", item.title
+  end
+
+  def test_update_title
+    item = @queue.push(sources: [{ type: "text", content: "test" }], title: "Old title")
+    @queue.update(item.id, title: "New title")
+
+    reloaded = @queue.find(item.id)
+    assert_equal "New title", reloaded.title
+  end
+
   # --- Directory source tests ---
 
   def test_push_with_directory_source

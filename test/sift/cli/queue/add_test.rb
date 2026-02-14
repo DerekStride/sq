@@ -129,6 +129,26 @@ class Sift::CLI::Queue::AddTest < Minitest::Test
     assert_equal "analyze", item.metadata["workflow"]
   end
 
+  def test_add_with_title_flag
+    exit_code = run_command(["add", "--title", "Fix login bug", "--text", "The login form crashes"])
+
+    assert_equal 0, exit_code
+
+    id = @stdout.lines.first.strip
+    item = queue.find(id)
+    assert_equal "Fix login bug", item.title
+  end
+
+  def test_add_without_title_has_nil_title
+    exit_code = run_command(["add", "--text", "test"])
+
+    assert_equal 0, exit_code
+
+    id = @stdout.lines.first.strip
+    item = queue.find(id)
+    assert_nil item.title
+  end
+
   def test_add_with_no_sources_returns_error
     exit_code = run_command(["add"])
 

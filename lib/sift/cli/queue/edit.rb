@@ -47,6 +47,10 @@ module Sift
             options[:system_prompt] = path
           end
 
+          parser.on("--set-title TITLE", "Set title for the item") do |title|
+            options[:title] = title
+          end
+
           parser.on("--set-metadata JSON", "Set metadata as JSON") do |json|
             options[:metadata] = parse_json(json, "metadata")
           end
@@ -69,6 +73,7 @@ module Sift
 
           attrs = {}
           attrs[:status] = options[:status] if options[:status]
+          attrs[:title] = options[:title] if options.key?(:title)
           attrs[:metadata] = options[:metadata] if options[:metadata]
 
           if options[:system_prompt]

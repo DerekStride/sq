@@ -19,6 +19,18 @@ class Sift::CLI::Queue::ShowTest < Minitest::Test
     assert_match(/text/i, @stdout)
   end
 
+  def test_show_displays_title_when_present
+    item = queue.push(
+      sources: [{ type: "text", content: "test" }],
+      title: "Fix login bug",
+    )
+
+    exit_code = run_command(["show", item.id])
+
+    assert_equal 0, exit_code
+    assert_match(/Fix login bug/, @stdout)
+  end
+
   def test_show_json_output
     item = queue.push(
       sources: [{ type: "file", path: "/test.rb" }],

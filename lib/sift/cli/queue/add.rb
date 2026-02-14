@@ -43,6 +43,10 @@ module Sift
             options[:system_prompt] = path
           end
 
+          parser.on("--title TITLE", "Title for the item") do |title|
+            options[:title] = title
+          end
+
           parser.on("--metadata JSON", "Attach metadata as JSON") do |json|
             options[:metadata] = parse_json(json, "metadata")
           end
@@ -65,7 +69,7 @@ module Sift
           metadata = options[:metadata]
           metadata["system_prompt"] = options[:system_prompt] if options[:system_prompt]
 
-          item = queue.push(sources: options[:sources], metadata: metadata)
+          item = queue.push(sources: options[:sources], title: options[:title], metadata: metadata)
           puts item.id
           logger.info("Added item #{item.id} with #{item.sources.length} source(s)")
           0

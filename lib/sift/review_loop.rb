@@ -104,7 +104,7 @@ module Sift
 
     def display_card(item, position: nil, total: nil)
       puts
-      title = "{{bold:Item #{item.id}}}"
+      title = item.title ? "{{bold:#{item.id}}} #{item.title}" : "{{bold:Item #{item.id}}}"
       title += " {{gray:[#{position}/#{total}]}}" if position && total
       ::CLI::UI::Frame.open(title, color: :blue) do
         grouped = item.sources.group_by(&:type)

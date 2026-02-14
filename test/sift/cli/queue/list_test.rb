@@ -42,6 +42,15 @@ class Sift::CLI::Queue::ListTest < Minitest::Test
     assert_includes ids, item2.id
   end
 
+  def test_list_shows_title_when_present
+    queue.push(sources: [{ type: "text", content: "test" }], title: "Fix login bug")
+
+    exit_code = run_command(["list"])
+
+    assert_equal 0, exit_code
+    assert_match(/Fix login bug/, @stdout)
+  end
+
   def test_list_empty_queue
     exit_code = run_command(["list"])
 
