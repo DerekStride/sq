@@ -120,6 +120,14 @@ module Sift
         if item.session_id
           puts ::CLI::UI.fmt("  {{yellow:transcript}}")
           puts ::CLI::UI.fmt("    {{gray:[session]}}")
+
+          parsed = SessionTranscript.parse(item.session_id)
+          if parsed && !parsed[:plan_paths].empty?
+            puts ::CLI::UI.fmt("  {{yellow:plan}}")
+            parsed[:plan_paths].each do |plan_path|
+              puts ::CLI::UI.fmt("    {{gray:#{File.basename(plan_path)}}}")
+            end
+          end
         end
       end
     end

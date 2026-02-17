@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
 require "json"
+require "set"
 
 module Sift
   # Parses a Claude Code session JSONL file into readable markdown.
   # Extracts user prompts, assistant reasoning, tool calls, and final responses.
   class SessionTranscript
     PROJECTS_DIR = File.join(Dir.home, ".claude", "projects")
+    PLANS_DIR_PATTERN = File.join(Dir.home, ".claude", "plans", "")
 
     # Find and parse a session transcript for the given session_id.
     # Returns nil if the session file doesn't exist.
@@ -15,6 +17,15 @@ module Sift
       return nil unless path
 
       new(path).render
+    end
+
+    # Returns { transcript: String, plan_paths: Array<String> } or nil.
+    def self.parse(session_id, cwd: Dir.pwd)
+      path = find_session(session_id, cwd: cwd)
+      return nil unless path
+
+      instance = new(path)
+      { transcript: instance.render, plan_paths: instance.plan_paths }
     end
 
     # Locate a session JSONL file. Tries the cwd-derived path first,
@@ -47,25 +58,67 @@ module Sift
     end
 
     def render
-      entries = parse_entries
+      entries = parse_all_entries
       tool_results = extract_tool_results(entries)
       messages = group_messages(entries)
       render_messages(messages, tool_results)
     end
 
+    def plan_paths
+      entries = parse_all_entries
+      extract_plan_paths(entries)
+    end
+
     private
 
-    def parse_entries
-      entries = []
-      File.foreach(@path) do |line|
-        next if line.strip.empty?
-
-        data = JSON.parse(line)
-        next unless %w[user assistant].include?(data["type"])
-
-        entries << data
+    def parse_all_entries
+      @all_entries ||= begin
+        entries = []
+        File.foreach(@path) do |line|
+          next if line.strip.empty?
+          data = JSON.parse(line)
+          entries << data
+        rescue JSON::ParserError
+          next
+        end
+        entries
       end
-      entries
+    end
+
+    def parse_entries
+      parse_all_entries.select { |data| %w[user assistant].include?(data["type"]) }
+    end
+
+    def extract_plan_paths(entries)
+      paths = Set.new
+
+      entries.each do |entry|
+        # Strategy 1: Write tool calls targeting ~/.claude/plans/
+        if entry["type"] == "assistant"
+          msg = entry["message"]
+          next unless msg
+          content = msg["content"]
+          next unless content.is_a?(Array)
+
+          content.each do |block|
+            next unless block.is_a?(Hash) && block["type"] == "tool_use" && block["name"] == "Write"
+            file_path = block.dig("input", "file_path")
+            paths << file_path if file_path&.include?("/.claude/plans/")
+          end
+        end
+
+        # Strategy 2: file-history-snapshot entries with trackedFileBackups
+        if entry["type"] == "file-history-snapshot"
+          backups = entry["trackedFileBackups"]
+          next unless backups.is_a?(Hash)
+
+          backups.each_key do |key|
+            paths << key if key.include?("/.claude/plans/")
+          end
+        end
+      end
+
+      paths.to_a
     end
 
     def extract_tool_results(entries)
@@ -166,7 +219,16 @@ module Sift
       when "Edit"
         "> Edit: `#{input["file_path"]}`"
       when "Write"
-        "> Write: `#{input["file_path"]}`"
+        file_path = input["file_path"]
+        if file_path&.include?("/.claude/plans/")
+          "> Plan: `#{File.basename(file_path)}`"
+        else
+          "> Write: `#{file_path}`"
+        end
+      when "EnterPlanMode"
+        "> Enter plan mode"
+      when "ExitPlanMode"
+        "> Exit plan mode"
       when "Task"
         desc = input["description"] || input["prompt"]&.lines&.first&.chomp
         "> Task: #{desc}"

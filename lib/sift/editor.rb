@@ -47,8 +47,14 @@ module Sift
       paths = []
 
       if @session_id
-        content = SessionTranscript.render(@session_id)
-        paths << write_temp(content, "transcript", ".md") if content
+        parsed = SessionTranscript.parse(@session_id)
+        if parsed
+          # Add plan files first so they open as the first tabs
+          parsed[:plan_paths].each do |plan_path|
+            paths << plan_path if ::File.exist?(plan_path)
+          end
+          paths << write_temp(parsed[:transcript], "transcript", ".md")
+        end
       end
 
       paths.concat(@sources.flat_map { |source| paths_for_source(source) })

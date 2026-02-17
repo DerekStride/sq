@@ -113,6 +113,31 @@ module Sift
             puts "  [transcript] session #{session_id[0, 8]}..."
             puts "      #{preview}" unless preview.empty?
           end
+
+          print_plans(session_id)
+        end
+
+        def print_plans(session_id)
+          parsed = Sift::SessionTranscript.parse(session_id)
+          return unless parsed
+
+          parsed[:plan_paths].each do |plan_path|
+            filename = File.basename(plan_path)
+            if cli_ui_available?
+              puts ::CLI::UI.fmt("  {{yellow:[plan]}} {{bold:#{filename}}}")
+            else
+              puts "  [plan] #{filename}"
+            end
+
+            if File.exist?(plan_path)
+              preview = File.read(plan_path).lines.first(3).map(&:chomp).join("\n")
+              if cli_ui_available?
+                preview.each_line { |l| puts ::CLI::UI.fmt("      {{gray:#{l.chomp}}}") }
+              else
+                preview.each_line { |l| puts "      #{l.chomp}" }
+              end
+            end
+          end
         end
 
         def first_user_prompt(path)

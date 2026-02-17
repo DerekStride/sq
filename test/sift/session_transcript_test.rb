@@ -357,6 +357,153 @@ class Sift::SessionTranscriptTest < Minitest::Test
     refute_includes transcript, "→"
   end
 
+  # --- Plan extraction tests ---
+
+  def test_extract_plan_paths_from_write_tool_call
+    plan_path = File.join(Dir.home, ".claude", "plans", "my-plan.md")
+    write_session([
+      user_entry("Plan this"),
+      assistant_entry("msg1", [
+        { "type" => "tool_use", "name" => "Write", "input" => { "file_path" => plan_path, "content" => "# Plan" } },
+      ]),
+    ])
+
+    instance = Sift::SessionTranscript.new(@session_path)
+    paths = instance.plan_paths
+
+    assert_equal [plan_path], paths
+  end
+
+  def test_extract_plan_paths_from_file_history_snapshot
+    plan_path = File.join(Dir.home, ".claude", "plans", "snapshot-plan.md")
+    write_session([
+      user_entry("Hello"),
+      { "type" => "file-history-snapshot", "trackedFileBackups" => { plan_path => "backup-data" } },
+      assistant_entry("msg1", [{ "type" => "text", "text" => "Done." }]),
+    ])
+
+    instance = Sift::SessionTranscript.new(@session_path)
+    paths = instance.plan_paths
+
+    assert_equal [plan_path], paths
+  end
+
+  def test_extract_plan_paths_deduplicates
+    plan_path = File.join(Dir.home, ".claude", "plans", "dup-plan.md")
+    write_session([
+      user_entry("Plan"),
+      assistant_entry("msg1", [
+        { "type" => "tool_use", "name" => "Write", "input" => { "file_path" => plan_path, "content" => "# Plan" } },
+      ]),
+      { "type" => "file-history-snapshot", "trackedFileBackups" => { plan_path => "backup" } },
+    ])
+
+    instance = Sift::SessionTranscript.new(@session_path)
+    paths = instance.plan_paths
+
+    assert_equal 1, paths.length
+    assert_equal plan_path, paths.first
+  end
+
+  def test_extract_plan_paths_ignores_non_plan_writes
+    write_session([
+      user_entry("Write file"),
+      assistant_entry("msg1", [
+        { "type" => "tool_use", "name" => "Write", "input" => { "file_path" => "/tmp/foo.rb", "content" => "code" } },
+      ]),
+    ])
+
+    instance = Sift::SessionTranscript.new(@session_path)
+    paths = instance.plan_paths
+
+    assert_empty paths
+  end
+
+  def test_extract_plan_paths_empty_when_no_plans
+    write_session([
+      user_entry("Hello"),
+      assistant_entry("msg1", [{ "type" => "text", "text" => "Hi." }]),
+    ])
+
+    instance = Sift::SessionTranscript.new(@session_path)
+    paths = instance.plan_paths
+
+    assert_empty paths
+  end
+
+  def test_parse_returns_transcript_and_plan_paths
+    plan_path = File.join(Dir.home, ".claude", "plans", "parse-plan.md")
+    with_projects_dir do |projects_dir|
+      session_id = "sess-parse-test"
+      slug = "/my/project".gsub("/", "-")
+      dir = File.join(projects_dir, slug)
+      FileUtils.mkdir_p(dir)
+      session_file = File.join(dir, "#{session_id}.jsonl")
+
+      File.open(session_file, "w") do |f|
+        f.puts(JSON.generate(user_entry("Plan this")))
+        f.puts(JSON.generate(assistant_entry("msg1", [
+          { "type" => "tool_use", "name" => "Write", "input" => { "file_path" => plan_path, "content" => "# Plan" } },
+        ])))
+      end
+
+      result = Sift::SessionTranscript.parse(session_id, cwd: "/my/project")
+
+      refute_nil result
+      assert_includes result[:transcript], "**User:** Plan this"
+      assert_equal [plan_path], result[:plan_paths]
+    end
+  end
+
+  def test_parse_returns_nil_for_missing_session
+    result = Sift::SessionTranscript.parse("nonexistent", cwd: @tmpdir)
+
+    assert_nil result
+  end
+
+  # --- Plan-aware tool rendering tests ---
+
+  def test_render_write_to_plan_shows_plan_label
+    plan_path = File.join(Dir.home, ".claude", "plans", "my-plan.md")
+    write_session([
+      user_entry("Plan"),
+      assistant_entry("msg1", [
+        { "type" => "tool_use", "name" => "Write", "input" => { "file_path" => plan_path, "content" => "# Plan" } },
+      ]),
+    ])
+
+    transcript = Sift::SessionTranscript.new(@session_path).render
+
+    assert_includes transcript, "> Plan: `my-plan.md`"
+    refute_includes transcript, "> Write:"
+  end
+
+  def test_render_enter_plan_mode
+    write_session([
+      user_entry("Start planning"),
+      assistant_entry("msg1", [
+        { "type" => "tool_use", "name" => "EnterPlanMode", "input" => {} },
+      ]),
+    ])
+
+    transcript = Sift::SessionTranscript.new(@session_path).render
+
+    assert_includes transcript, "> Enter plan mode"
+  end
+
+  def test_render_exit_plan_mode
+    write_session([
+      user_entry("Done planning"),
+      assistant_entry("msg1", [
+        { "type" => "tool_use", "name" => "ExitPlanMode", "input" => {} },
+      ]),
+    ])
+
+    transcript = Sift::SessionTranscript.new(@session_path).render
+
+    assert_includes transcript, "> Exit plan mode"
+  end
+
   def test_render_unknown_tool
     write_session([
       user_entry("Do something"),
