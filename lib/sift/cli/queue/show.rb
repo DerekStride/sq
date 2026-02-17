@@ -50,6 +50,8 @@ module Sift
 
         def refresh_worktree_sources(item)
           git = Sift::Git.new
+          return item unless git.worktree_valid?(item.worktree.path)
+
           config = Sift::Config.new
           base = config.worktree_base_branch
           sources = item.sources.map(&:to_h)
