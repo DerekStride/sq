@@ -125,6 +125,12 @@ register_subcommand Queue::MyCommand, category: :core
 - `claim(id)` atomically transitions pending → in_progress (with auto-release block form)
 - Corrupt JSONL lines are skipped with a warning, not fatal
 
+## Agent Docs
+
+The `agent-docs/` directory contains detailed documentation on specific subsystems. Consult these when working in the relevant area:
+
+- **`githooks.md`** — How sift installs per-worktree git hooks, the exclude strategy, and why we chose per-worktree over global hooks
+
 ## Issue Tracking
 
 This project uses **bd** (beads) for issue tracking.

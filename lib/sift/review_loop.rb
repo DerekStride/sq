@@ -8,7 +8,7 @@ require_relative "statusline"
 
 module Sift
   class ReviewLoop
-    AGENT_DOCS_DIR = File.expand_path("../../../agent-docs", __FILE__)
+    TEMPLATES_DIR = File.expand_path("templates", __dir__)
 
     def initialize(config:)
       @config = config
@@ -279,7 +279,7 @@ module Sift
       @agent_context ||= begin
         parts = []
 
-        path = File.join(AGENT_DOCS_DIR, "general.md")
+        path = File.join(TEMPLATES_DIR, "general.md")
         if File.exist?(path)
           template = File.read(path)
           parts << template.gsub("{{queue_path}}", @queue.path)
