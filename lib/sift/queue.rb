@@ -55,7 +55,7 @@ module Sift
     end
 
     # Represents a queue item
-    Item = Struct.new(:id, :title, :status, :sources, :metadata, :session_id, :worktree, :errors, :created_at, :updated_at, keyword_init: true) do
+    Item = Struct.new(:id, :title, :status, :sources, :metadata, :session_id, :worktree, :blocked_by, :errors, :created_at, :updated_at, keyword_init: true) do
       def to_h
         h = {
           id: id,
@@ -68,6 +68,7 @@ module Sift
         }
         h[:title] = title if title
         h[:worktree] = worktree.to_h if worktree
+        h[:blocked_by] = blocked_by if blocked_by && !blocked_by.empty?
         h[:errors] = errors if errors && !errors.empty?
         h
       end
@@ -91,6 +92,7 @@ module Sift
           metadata: hash["metadata"] || hash[:metadata] || {},
           session_id: hash["session_id"] || hash[:session_id],
           worktree: Worktree.from_h(worktree_data),
+          blocked_by: hash["blocked_by"] || hash[:blocked_by] || [],
           errors: hash["errors"] || hash[:errors] || [],
           created_at: hash["created_at"] || hash[:created_at],
           updated_at: hash["updated_at"] || hash[:updated_at]
@@ -108,6 +110,20 @@ module Sift
       def closed?
         status == "closed"
       end
+
+      def blocked?
+        blocked_by && !blocked_by.empty?
+      end
+
+      # An item is ready if it's pending and none of its blockers are
+      # still pending. Pass pending_ids (Set) from the queue for
+      # accurate cross-item resolution.
+      def ready?(pending_ids = nil)
+        return false unless pending?
+        return true unless blocked?
+        return true unless pending_ids
+        blocked_by.none? { |id| pending_ids.include?(id) }
+      end
     end
 
     attr_reader :path
@@ -118,7 +134,7 @@ module Sift
 
     # Add a new item to the queue
     # Returns the created Item
-    def push(sources:, title: nil, metadata: {}, session_id: nil)
+    def push(sources:, title: nil, metadata: {}, session_id: nil, blocked_by: [])
       validate_sources!(sources)
 
       with_exclusive_lock do |f|
@@ -132,6 +148,7 @@ module Sift
           sources: normalize_sources(sources),
           metadata: metadata,
           session_id: session_id,
+          blocked_by: Array(blocked_by),
           created_at: now,
           updated_at: now
         )
@@ -145,6 +162,19 @@ module Sift
     # Iterate over pending items
     def each_pending(&block)
       filter(status: "pending").each(&block)
+    end
+
+    # Return pending items that are not blocked by any open item.
+    # An item is ready when all IDs in its blocked_by list refer to
+    # items that are closed, in_progress, or no longer in the queue.
+    def ready
+      items = all
+      pending_ids = items.select(&:pending?).map(&:id).to_set
+      items.select do |item|
+        next false unless item.pending?
+        next true unless item.blocked?
+        item.blocked_by.none? { |id| pending_ids.include?(id) }
+      end
     end
 
     # Update an item by ID
