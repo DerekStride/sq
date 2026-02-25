@@ -216,7 +216,7 @@ module Sift
 
           updates = { session_id: result.session_id }
 
-          if item.worktree
+          if item.worktree && Sift::Worktree.exists?(item.id) && @git.worktree_valid?(item.worktree.path)
             updates[:sources] = add_worktree_sources(item)
           end
 
@@ -280,6 +280,8 @@ module Sift
 
       def refresh_worktree_sources(item)
         return item unless item.worktree
+        return item unless Sift::Worktree.exists?(item.id)
+        return item unless @git.worktree_valid?(item.worktree.path)
 
         updated_sources = add_worktree_sources(item)
         @queue.update(item.id, sources: updated_sources)

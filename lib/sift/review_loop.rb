@@ -415,6 +415,8 @@ module Sift
         return item
       end
 
+      return item unless @git.worktree_valid?(item.worktree.path)
+
       updated_sources = add_worktree_sources(item)
       @queue.update(item.id, sources: updated_sources)
       @queue.find(item.id)
