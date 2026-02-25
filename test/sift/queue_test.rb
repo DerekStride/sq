@@ -288,6 +288,167 @@ class Sift::QueueTest < Minitest::Test
     assert_equal "New title", reloaded.title
   end
 
+  # --- blocked_by field tests ---
+
+  def test_item_blocked_by_defaults_to_empty_array
+    item = Sift::Queue::Item.from_h({ "id" => "abc", "status" => "pending", "sources" => [] })
+    assert_equal [], item.blocked_by
+  end
+
+  def test_item_to_h_omits_blocked_by_when_empty
+    source = Sift::Queue::Source.new(type: "text", content: "test")
+    item = Sift::Queue::Item.new(id: "abc", status: "pending", sources: [source], blocked_by: [])
+    refute item.to_h.key?(:blocked_by)
+  end
+
+  def test_item_to_h_includes_blocked_by_when_present
+    source = Sift::Queue::Source.new(type: "text", content: "test")
+    item = Sift::Queue::Item.new(id: "abc", status: "pending", sources: [source], blocked_by: ["x1y", "z2w"])
+    assert_equal ["x1y", "z2w"], item.to_h[:blocked_by]
+  end
+
+  def test_item_from_h_with_blocked_by
+    hash = {
+      "id" => "abc", "status" => "pending",
+      "sources" => [{ "type" => "text", "content" => "test" }],
+      "blocked_by" => ["x1y"]
+    }
+    item = Sift::Queue::Item.from_h(hash)
+    assert_equal ["x1y"], item.blocked_by
+  end
+
+  def test_blocked_predicate
+    item = Sift::Queue::Item.new(id: "1", status: "pending", sources: [], blocked_by: ["x"])
+    assert item.blocked?
+
+    item = Sift::Queue::Item.new(id: "2", status: "pending", sources: [], blocked_by: [])
+    refute item.blocked?
+
+    item = Sift::Queue::Item.new(id: "3", status: "pending", sources: [])
+    refute item.blocked?
+  end
+
+  def test_ready_predicate_no_blockers
+    item = Sift::Queue::Item.new(id: "1", status: "pending", sources: [], blocked_by: [])
+    assert item.ready?
+  end
+
+  def test_ready_predicate_not_pending
+    item = Sift::Queue::Item.new(id: "1", status: "closed", sources: [], blocked_by: [])
+    refute item.ready?
+  end
+
+  def test_ready_predicate_with_pending_ids
+    item = Sift::Queue::Item.new(id: "1", status: "pending", sources: [], blocked_by: ["x"])
+    # x is still pending — item is blocked
+    refute item.ready?(Set.new(["x"]))
+    # x is not in pending set (resolved) — item is ready
+    assert item.ready?(Set.new(["y"]))
+    # empty pending set — all blockers resolved
+    assert item.ready?(Set.new)
+  end
+
+  def test_push_with_blocked_by
+    blocker = @queue.push(sources: [{ type: "text", content: "first" }])
+    item = @queue.push(sources: [{ type: "text", content: "second" }], blocked_by: [blocker.id])
+
+    assert_equal [blocker.id], item.blocked_by
+  end
+
+  def test_blocked_by_roundtrip_through_queue
+    blocker = @queue.push(sources: [{ type: "text", content: "first" }])
+    item = @queue.push(sources: [{ type: "text", content: "second" }], blocked_by: [blocker.id])
+
+    reloaded = @queue.find(item.id)
+    assert_equal [blocker.id], reloaded.blocked_by
+  end
+
+  def test_update_blocked_by
+    item = @queue.push(sources: [{ type: "text", content: "test" }], blocked_by: ["x1y"])
+    @queue.update(item.id, blocked_by: [])
+
+    reloaded = @queue.find(item.id)
+    assert_equal [], reloaded.blocked_by
+  end
+
+  # --- Queue#ready tests ---
+
+  def test_ready_returns_unblocked_pending_items
+    a = @queue.push(sources: [{ type: "text", content: "a" }])
+    b = @queue.push(sources: [{ type: "text", content: "b" }], blocked_by: [a.id])
+
+    ready = @queue.ready
+    assert_equal 1, ready.length
+    assert_equal a.id, ready.first.id
+  end
+
+  def test_ready_unblocks_when_blocker_closed
+    a = @queue.push(sources: [{ type: "text", content: "a" }])
+    b = @queue.push(sources: [{ type: "text", content: "b" }], blocked_by: [a.id])
+
+    @queue.update(a.id, status: "closed")
+
+    ready = @queue.ready
+    assert_equal 1, ready.length
+    assert_equal b.id, ready.first.id
+  end
+
+  def test_ready_excludes_partially_blocked
+    a = @queue.push(sources: [{ type: "text", content: "a" }])
+    b = @queue.push(sources: [{ type: "text", content: "b" }])
+    c = @queue.push(sources: [{ type: "text", content: "c" }], blocked_by: [a.id, b.id])
+
+    @queue.update(a.id, status: "closed")
+
+    ready = @queue.ready
+    ids = ready.map(&:id)
+    assert_includes ids, b.id
+    refute_includes ids, c.id  # still blocked by b
+  end
+
+  def test_ready_excludes_in_progress_items
+    a = @queue.push(sources: [{ type: "text", content: "a" }])
+    @queue.update(a.id, status: "in_progress")
+
+    ready = @queue.ready
+    assert_empty ready
+  end
+
+  def test_ready_treats_in_progress_blocker_as_resolved
+    a = @queue.push(sources: [{ type: "text", content: "a" }])
+    b = @queue.push(sources: [{ type: "text", content: "b" }], blocked_by: [a.id])
+
+    @queue.update(a.id, status: "in_progress")
+
+    ready = @queue.ready
+    assert_equal 1, ready.length
+    assert_equal b.id, ready.first.id
+  end
+
+  def test_ready_unblocks_when_blocker_removed
+    a = @queue.push(sources: [{ type: "text", content: "a" }])
+    b = @queue.push(sources: [{ type: "text", content: "b" }], blocked_by: [a.id])
+
+    @queue.remove(a.id)
+
+    # blocker no longer exists — item should be ready
+    ready = @queue.ready
+    assert_equal 1, ready.length
+    assert_equal b.id, ready.first.id
+  end
+
+  def test_ready_with_no_items
+    assert_empty @queue.ready
+  end
+
+  def test_ready_all_unblocked
+    @queue.push(sources: [{ type: "text", content: "a" }])
+    @queue.push(sources: [{ type: "text", content: "b" }])
+
+    ready = @queue.ready
+    assert_equal 2, ready.length
+  end
+
   # --- Directory source tests ---
 
   def test_push_with_directory_source

@@ -47,6 +47,10 @@ module Sift
             options[:metadata] = parse_json(json, "metadata")
           end
 
+          parser.on("--blocked-by IDS", "Comma-separated blocker IDs") do |ids|
+            options[:blocked_by] = ids.split(",").map(&:strip).reject(&:empty?)
+          end
+
           super
         end
 
@@ -64,7 +68,8 @@ module Sift
 
           metadata = options[:metadata]
 
-          item = queue.push(sources: options[:sources], title: options[:title], metadata: metadata)
+          item = queue.push(sources: options[:sources], title: options[:title], metadata: metadata,
+            blocked_by: options[:blocked_by] || [])
           puts item.id
           logger.info("Added item #{item.id} with #{item.sources.length} source(s)")
           0

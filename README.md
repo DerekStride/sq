@@ -68,14 +68,20 @@ sq add --diff changes.patch --file main.rb     # Add with diff + file source
 sq add --stdin text < file.txt                 # Add from stdin
 sq add --system-prompt prompts/review.md       # Add with per-item system prompt
 sq add --metadata '{"priority":"high"}'        # Add with metadata
+sq add --text "Depends on x" --blocked-by a1b  # Add with dependency
 
 sq list                                        # List all items
 sq list --status pending                       # Filter by status
+sq list --ready                                # Pending + unblocked
+sq list --filter 'select(.metadata.p == 0)'    # jq filter expression
+sq list --sort .metadata.priority              # Sort by jq path
+sq list --sort .created_at --reverse           # Sort descending
 sq list --json                                 # JSON output
 
 sq show <id>                                   # Show item details
 
 sq edit <id> --set-status closed               # Modify item fields
+sq edit <id> --set-blocked-by a1b,c3d          # Set dependencies
 
 sq rm <id>                                     # Remove item
 ```

@@ -51,6 +51,10 @@ module Sift
             options[:metadata] = parse_json(json, "metadata")
           end
 
+          parser.on("--set-blocked-by IDS", "Set blocker IDs (comma-separated, empty to clear)") do |ids|
+            options[:blocked_by] = ids.split(",").map(&:strip).reject(&:empty?)
+          end
+
           super
         end
 
@@ -71,6 +75,7 @@ module Sift
           attrs[:status] = options[:status] if options[:status]
           attrs[:title] = options[:title] if options.key?(:title)
           attrs[:metadata] = options[:metadata] if options[:metadata]
+          attrs[:blocked_by] = options[:blocked_by] if options.key?(:blocked_by)
 
           if options[:add_sources].any? || options[:rm_sources].any?
             sources = item.sources.map(&:to_h)
