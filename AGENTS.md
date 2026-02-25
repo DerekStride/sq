@@ -58,10 +58,16 @@ sq add --text "Review this"             # Add item with text source
 sq add --diff changes.patch             # Add item with diff source
 sq add --stdin text < file.txt          # Add from stdin
 sq add --system-prompt prompts/sec.md   # Per-item system prompt
+sq add --text "X" --blocked-by a1b      # Add with dependency
 sq list --status pending                # List/filter items
+sq list --ready                         # Pending + unblocked items
+sq list --filter 'select(.p == 0)'      # jq filter expression
+sq list --sort .metadata.priority       # Sort by jq path
+sq list --sort .created_at --reverse    # Sort descending
 sq list --json                          # JSON output
 sq show <id> --json                     # Show item details
 sq edit <id> --set-status closed        # Modify item
+sq edit <id> --set-blocked-by a1b,c3d   # Set dependencies
 sq rm <id>                              # Remove item
 ```
 
