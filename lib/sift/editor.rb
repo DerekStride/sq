@@ -11,10 +11,11 @@ module Sift
     # Terminal editors that support -p for tab-per-file
     TAB_EDITORS = %w[vi vim nvim].freeze
 
-    def initialize(sources:, item_id:, session_id: nil)
+    def initialize(sources:, item_id:, session_id: nil, restore_tty: true)
       @sources = sources
       @item_id = item_id
       @session_id = session_id
+      @restore_tty = restore_tty
     end
 
     def open
@@ -24,7 +25,7 @@ module Sift
       cmd = editor_command
       system(*cmd, *paths)
     ensure
-      system("stty", "sane", err: File::NULL)
+      system("stty", "sane", err: File::NULL) if @restore_tty
     end
 
     def resolve_editor

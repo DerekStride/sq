@@ -6,6 +6,7 @@ require "lipgloss"
 require "async"
 require "tempfile"
 
+require_relative "exec_command"
 require_relative "messages"
 require_relative "styles"
 require_relative "keymap"
@@ -501,13 +502,11 @@ module Sift
         item = current_item
         return [self, nil] unless item
 
-        # Use a lambda command that runs the editor and sends ViewDoneMessage
-        cmd = -> {
-          editor = Editor.new(sources: item.sources, item_id: item.id, session_id: item.session_id)
+        callable = -> {
+          editor = Editor.new(sources: item.sources, item_id: item.id, session_id: item.session_id, restore_tty: false)
           editor.open
-          ViewDoneMessage.new
         }
-        [self, cmd]
+        [self, Bubbletea.exec(callable, message: ViewDoneMessage.new)]
       end
 
       def handle_close(item)
