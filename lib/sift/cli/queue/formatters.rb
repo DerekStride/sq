@@ -6,8 +6,9 @@ module Sift
       module Formatters
         private
 
-        def print_item_summary(item)
-          status_color = status_color_code(item.status)
+        def print_item_summary(item, pending_ids: nil)
+          display_status = resolve_display_status(item, pending_ids)
+          status_color = status_color_code(display_status)
           source_types = item.sources.map(&:type).tally.map { |t, c| c > 1 ? "#{t}:#{c}" : t }.join(",")
 
           title_part = item.title ? "  #{item.title}" : ""
@@ -17,7 +18,7 @@ module Sift
               "{{bold:#{item.id}}}  #{status_color}#{title_part}  {{gray:#{source_types}}}  {{gray:#{item.created_at}}}"
             )
           else
-            puts "#{item.id}  [#{item.status}]#{title_part}  #{source_types}  #{item.created_at}"
+            puts "#{item.id}  [#{display_status}]#{title_part}  #{source_types}  #{item.created_at}"
           end
         end
 
@@ -29,6 +30,11 @@ module Sift
               puts ::CLI::UI.fmt("{{bold:Created:}} {{gray:#{item.created_at}}}")
               puts ::CLI::UI.fmt("{{bold:Updated:}} {{gray:#{item.updated_at}}}")
               puts ::CLI::UI.fmt("{{bold:Session:}} {{gray:#{item.session_id || "none"}}}")
+
+              if item.blocked?
+                ids = item.blocked_by.join(", ")
+                puts ::CLI::UI.fmt("{{bold:Blocked by:}} {{red:#{ids}}}")
+              end
 
               if item.worktree
                 wt = item.worktree
@@ -56,6 +62,10 @@ module Sift
             puts "Created: #{item.created_at}"
             puts "Updated: #{item.updated_at}"
             puts "Session: #{item.session_id || "none"}"
+
+            if item.blocked?
+              puts "Blocked by: #{item.blocked_by.join(", ")}"
+            end
 
             if item.worktree
               wt = item.worktree
@@ -154,12 +164,19 @@ module Sift
           nil
         end
 
+        def resolve_display_status(item, pending_ids)
+          return item.status unless item.pending? && item.blocked?
+          return "blocked" unless pending_ids
+          item.blocked_by.any? { |id| pending_ids.include?(id) } ? "blocked" : item.status
+        end
+
         def status_color_code(status)
           if cli_ui_available?
             case status
             when "pending" then "{{yellow:#{status}}}"
             when "in_progress" then "{{blue:#{status}}}"
             when "closed" then "{{green:#{status}}}"
+            when "blocked" then "{{red:#{status}}}"
             else "{{gray:#{status}}}"
             end
           else

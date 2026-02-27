@@ -2,6 +2,7 @@
 
 require "json"
 require "open3"
+require "set"
 
 module Sift
   module CLI
@@ -68,7 +69,8 @@ module Sift
             if items.empty?
               logger.info("No items found")
             else
-              items.each { |item| print_item_summary(item) }
+              pending_ids = Set.new(queue.filter(status: "pending").map(&:id))
+              items.each { |item| print_item_summary(item, pending_ids: pending_ids) }
               logger.info("#{items.length} item(s)")
             end
           end
