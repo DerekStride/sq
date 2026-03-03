@@ -19,9 +19,11 @@ Gem::Specification.new do |spec|
     exe/*
     LICENSE.txt
     README.md
+    sq-rust/src/**/*.rs
+    sq-rust/Cargo.*
   ])
   spec.bindir = "exe"
-  spec.executables = ["sift", "sq"]
+  spec.executables = ["sift"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "async", "~> 2.0"
