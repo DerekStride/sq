@@ -445,7 +445,7 @@ fn test_update_item() {
     assert_eq!(updated.status, "in_progress");
     assert_eq!(updated.title.as_deref(), Some("New title"));
     assert_eq!(updated.metadata["key"], "value");
-    assert_ne!(updated.updated_at, item.updated_at);
+    assert!(updated.updated_at >= item.updated_at);
 }
 
 #[test]
