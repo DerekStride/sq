@@ -145,9 +145,13 @@ pub struct EditArgs {
     #[arg(long = "set-title", value_name = "TITLE")]
     pub set_title: Option<String>,
 
-    /// Set metadata as JSON
+    /// Set metadata as JSON (replaces full metadata object)
     #[arg(long = "set-metadata", value_name = "JSON")]
     pub set_metadata: Option<String>,
+
+    /// Merge metadata object as JSON (deep object merge)
+    #[arg(long = "merge-metadata", value_name = "JSON")]
+    pub merge_metadata: Option<String>,
 
     /// Set blocker IDs (comma-separated, empty to clear)
     #[arg(long = "set-blocked-by", value_name = "IDS")]

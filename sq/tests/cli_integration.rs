@@ -389,6 +389,111 @@ fn test_edit_json() {
 }
 
 #[test]
+fn test_edit_merge_metadata_deep_merge() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q", &qp, "add", "--text", "test",
+            "--metadata", r#"{"pi_tasks":{"priority":"low","type":"bug"},"owner":"derek"}"#,
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q", &qp, "edit", &id,
+            "--merge-metadata", r#"{"pi_tasks":{"priority":"high"}}"#,
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(json["metadata"]["pi_tasks"]["priority"], "high");
+    assert_eq!(json["metadata"]["pi_tasks"]["type"], "bug");
+    assert_eq!(json["metadata"]["owner"], "derek");
+}
+
+#[test]
+fn test_edit_merge_metadata_array_replace_and_null() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q", &qp, "add", "--text", "test",
+            "--metadata", r#"{"labels":["a","b"],"pi_tasks":{"due":"2026-03-10"}}"#,
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q", &qp, "edit", &id,
+            "--merge-metadata", r#"{"labels":["urgent"],"pi_tasks":{"due":null}}"#,
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(json["metadata"]["labels"], serde_json::json!(["urgent"]));
+    assert!(json["metadata"]["pi_tasks"]["due"].is_null());
+}
+
+#[test]
+fn test_edit_merge_metadata_invalid_non_object_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--merge-metadata", "[]"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--merge-metadata must be a JSON object"));
+}
+
+#[test]
+fn test_edit_set_and_merge_metadata_mutually_exclusive() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q", &qp, "edit", &id,
+            "--set-metadata", "{}",
+            "--merge-metadata", "{}",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--set-metadata and --merge-metadata are mutually exclusive"));
+}
+
+#[test]
 fn test_edit_add_and_rm_source() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);

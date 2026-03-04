@@ -26,6 +26,11 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     let mut attrs = UpdateAttrs::default();
     let mut has_changes = false;
 
+    if args.set_metadata.is_some() && args.merge_metadata.is_some() {
+        eprintln!("Error: --set-metadata and --merge-metadata are mutually exclusive");
+        return Ok(1);
+    }
+
     // Status
     if let Some(ref status) = args.set_status {
         if !VALID_STATUSES.contains(&status.as_str()) {
@@ -46,7 +51,7 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         has_changes = true;
     }
 
-    // Metadata
+    // Metadata (full replace)
     if let Some(ref json_str) = args.set_metadata {
         match serde_json::from_str::<serde_json::Value>(json_str) {
             Ok(v) => {
@@ -58,6 +63,26 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
                 return Ok(1);
             }
         }
+    }
+
+    // Metadata (deep merge)
+    if let Some(ref json_str) = args.merge_metadata {
+        let patch = match serde_json::from_str::<serde_json::Value>(json_str) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Error: Invalid JSON for merge metadata: {}", e);
+                return Ok(1);
+            }
+        };
+
+        if !patch.is_object() {
+            eprintln!("Error: --merge-metadata must be a JSON object");
+            return Ok(1);
+        }
+
+        let merged = deep_merge(item.metadata.clone(), patch);
+        attrs.metadata = Some(merged);
+        has_changes = true;
     }
 
     // Blocked by
@@ -146,6 +171,22 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
             eprintln!("Error: Item not found: {}", id);
             Ok(1)
         }
+    }
+}
+
+fn deep_merge(current: serde_json::Value, patch: serde_json::Value) -> serde_json::Value {
+    match (current, patch) {
+        (serde_json::Value::Object(mut cur_map), serde_json::Value::Object(patch_map)) => {
+            for (k, patch_v) in patch_map {
+                let next = match cur_map.remove(&k) {
+                    Some(cur_v) => deep_merge(cur_v, patch_v),
+                    None => patch_v,
+                };
+                cur_map.insert(k, next);
+            }
+            serde_json::Value::Object(cur_map)
+        }
+        (_, patch_non_object) => patch_non_object,
     }
 }
 
