@@ -148,7 +148,23 @@ fn test_add_no_sources_fails() {
         .args(["-q", &qp, "add"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("At least one source is required"));
+        .stderr(predicate::str::contains("At least one source or --description is required"));
+}
+
+#[test]
+fn test_add_description_without_sources() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--description", "desc only", "--json"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["description"], "desc only");
+    assert!(json["sources"].as_array().unwrap().is_empty());
 }
 
 #[test]

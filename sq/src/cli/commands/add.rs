@@ -57,9 +57,9 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
         });
     }
 
-    if sources.is_empty() {
-        eprintln!("Error: At least one source is required");
-        eprintln!("Use --diff, --file, --text, --directory, or --stdin");
+    if sources.is_empty() && args.description.is_none() {
+        eprintln!("Error: At least one source or --description is required");
+        eprintln!("Use --diff, --file, --text, --directory, --stdin, or --description");
         return Ok(1);
     }
 

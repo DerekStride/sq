@@ -261,6 +261,7 @@ impl Queue {
         session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
+        self.validate_sources(&sources)?;
         self.push_with_description(sources, title, None, metadata, session_id, blocked_by)
     }
 
@@ -274,7 +275,10 @@ impl Queue {
         session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
-        self.validate_sources(&sources)?;
+        if sources.is_empty() && description.is_none() {
+            anyhow::bail!("Sources cannot be empty without description");
+        }
+        self.validate_source_types(&sources)?;
 
         self.with_exclusive_lock(|f| {
             let existing = read_items(f, &self.path);
@@ -415,6 +419,10 @@ impl Queue {
         if sources.is_empty() {
             anyhow::bail!("Sources cannot be empty");
         }
+        self.validate_source_types(sources)
+    }
+
+    fn validate_source_types(&self, sources: &[Source]) -> Result<()> {
         for source in sources {
             if !VALID_SOURCE_TYPES.contains(&source.type_.as_str()) {
                 anyhow::bail!(
