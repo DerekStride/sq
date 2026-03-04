@@ -275,8 +275,13 @@ impl Queue {
         session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
-        if sources.is_empty() && description.is_none() {
-            anyhow::bail!("Sources cannot be empty without description");
+        let has_metadata = match &metadata {
+            serde_json::Value::Object(map) => !map.is_empty(),
+            _ => true,
+        };
+
+        if sources.is_empty() && title.is_none() && description.is_none() && !has_metadata {
+            anyhow::bail!("Item requires at least one source, title, description, or metadata");
         }
         self.validate_source_types(&sources)?;
 
