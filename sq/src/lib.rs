@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "sq", about = "Manage Sift's review queue")]
+#[command(name = "sq", version, about = "Manage Sift's review queue")]
 pub struct Cli {
     /// Path to queue file
     #[arg(short = 'q', long = "queue", value_name = "PATH", global = true)]

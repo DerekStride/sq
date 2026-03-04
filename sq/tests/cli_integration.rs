@@ -918,6 +918,17 @@ fn test_prime_output() {
         .stdout(predicate::str::contains("### `sq rm`"));
 }
 
+// ── Version Flag ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_version_flag() {
+    sq_cmd()
+        .args(["--version"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sq 0.2.0"));
+}
+
 // ── Queue Path Resolution ───────────────────────────────────────────────────
 
 #[test]
