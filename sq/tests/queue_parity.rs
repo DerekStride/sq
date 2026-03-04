@@ -16,6 +16,7 @@ fn test_parse_minimal_item() {
     assert_eq!(item.id, "abc");
     assert_eq!(item.status, "pending");
     assert!(item.title.is_none());
+    assert!(item.description.is_none());
     assert_eq!(item.sources.len(), 1);
     assert_eq!(item.sources[0].type_, "text");
     assert_eq!(item.sources[0].content.as_deref(), Some("Hello world"));
@@ -35,6 +36,7 @@ fn test_parse_full_item() {
     let item: Item = serde_json::from_str(json).unwrap();
     assert_eq!(item.id, "x1y");
     assert_eq!(item.title.as_deref(), Some("Fix login bug"));
+    assert!(item.description.is_none());
     assert_eq!(item.status, "in_progress");
     assert_eq!(item.sources.len(), 2);
     assert_eq!(item.session_id.as_deref(), Some("sess456"));
@@ -75,6 +77,7 @@ fn test_session_id_always_serialized() {
     let item = Item {
         id: "abc".to_string(),
         title: None,
+        description: None,
         status: "pending".to_string(),
         sources: vec![Source {
             type_: "text".to_string(),
@@ -99,6 +102,7 @@ fn test_optional_fields_omitted_when_empty() {
     let item = Item {
         id: "abc".to_string(),
         title: None,
+        description: None,
         status: "pending".to_string(),
         sources: vec![Source {
             type_: "text".to_string(),
@@ -116,6 +120,7 @@ fn test_optional_fields_omitted_when_empty() {
     };
     let json = item.to_json_string();
     assert!(!json.contains("\"title\""), "title should be omitted when None");
+    assert!(!json.contains("\"description\""), "description should be omitted when None");
     assert!(!json.contains("\"worktree\""), "worktree should be omitted when None");
     assert!(!json.contains("\"blocked_by\""), "blocked_by should be omitted when empty");
     assert!(!json.contains("\"errors\""), "errors should be omitted when empty");
@@ -435,6 +440,7 @@ fn test_update_item() {
             UpdateAttrs {
                 status: Some("in_progress".to_string()),
                 title: Some("New title".to_string()),
+                description: Some("New description".to_string()),
                 metadata: Some(serde_json::json!({"key": "value"})),
                 ..Default::default()
             },
@@ -444,6 +450,7 @@ fn test_update_item() {
 
     assert_eq!(updated.status, "in_progress");
     assert_eq!(updated.title.as_deref(), Some("New title"));
+    assert_eq!(updated.description.as_deref(), Some("New description"));
     assert_eq!(updated.metadata["key"], "value");
     assert!(updated.updated_at >= item.updated_at);
 }

@@ -83,7 +83,14 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
         None => Vec::new(),
     };
 
-    let item = queue.push(sources, args.title.clone(), metadata, None, blocked_by)?;
+    let item = queue.push_with_description(
+        sources,
+        args.title.clone(),
+        args.description.clone(),
+        metadata,
+        None,
+        blocked_by,
+    )?;
 
     if args.json {
         let json = serde_json::to_string_pretty(&item.to_json_value())?;

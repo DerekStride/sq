@@ -51,6 +51,12 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         has_changes = true;
     }
 
+    // Description
+    if let Some(ref description) = args.set_description {
+        attrs.description = Some(description.clone());
+        has_changes = true;
+    }
+
     // Metadata (full replace)
     if let Some(ref json_str) = args.set_metadata {
         match serde_json::from_str::<serde_json::Value>(json_str) {

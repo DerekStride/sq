@@ -2,7 +2,7 @@ use crate::queue::Item;
 use std::collections::HashSet;
 
 /// Print a one-line summary for an item (used by `sq list`).
-/// Format: {id}  [{status}]{title}  {source_types}  {created_at}
+/// Format: {id}  [{status}]  {title_or_description}  {source_types}  {created_at}
 pub fn print_item_summary(item: &Item, pending_ids: Option<&HashSet<String>>) {
     let display_status = resolve_display_status(item, pending_ids);
 
@@ -27,14 +27,15 @@ pub fn print_item_summary(item: &Item, pending_ids: Option<&HashSet<String>>) {
         .collect::<Vec<_>>()
         .join(",");
 
-    let title_part = match &item.title {
-        Some(t) => format!("  {}", t),
-        None => String::new(),
+    let label = match (&item.title, &item.description) {
+        (Some(t), _) => t.clone(),
+        (None, Some(d)) => d.clone(),
+        (None, None) => String::new(),
     };
 
     println!(
-        "{}  [{}]{}  {}  {}",
-        item.id, display_status, title_part, source_types, item.created_at
+        "{}  [{}]  {}  {}  {}",
+        item.id, display_status, label, source_types, item.created_at
     );
 }
 
@@ -43,6 +44,9 @@ pub fn print_item_detail(item: &Item) {
     println!("Item: {}", item.id);
     if let Some(ref title) = item.title {
         println!("Title: {}", title);
+    }
+    if let Some(ref description) = item.description {
+        println!("Description: {}", description);
     }
     println!("Status: {}", item.status);
     println!("Created: {}", item.created_at);

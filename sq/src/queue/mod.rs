@@ -23,6 +23,9 @@ pub struct Item {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
     pub status: String,
 
     pub sources: Vec<Source>,
@@ -56,9 +59,9 @@ fn is_empty_json_vec(v: &[serde_json::Value]) -> bool {
 }
 
 /// We need the JSON field order to match Ruby exactly.
-/// Ruby `to_h` outputs: id, (title if present), status, sources, metadata,
-/// session_id, created_at, updated_at, (worktree if present),
-/// (blocked_by if non-empty), (errors if non-empty).
+/// Ruby `to_h` outputs: id, (title if present), (description if present),
+/// status, sources, metadata, session_id, created_at, updated_at,
+/// (worktree if present), (blocked_by if non-empty), (errors if non-empty).
 ///
 /// serde by default serializes in struct field order, so we order the fields
 /// to match. But Ruby puts title BEFORE status when present, and worktree/
@@ -69,11 +72,17 @@ impl Item {
 
         map.insert("id".to_string(), serde_json::Value::String(self.id.clone()));
 
-        // title goes right after id, before status (only if present)
+        // title/description go right after id, before status (only if present)
         if let Some(ref title) = self.title {
             map.insert(
                 "title".to_string(),
                 serde_json::Value::String(title.clone()),
+            );
+        }
+        if let Some(ref description) = self.description {
+            map.insert(
+                "description".to_string(),
+                serde_json::Value::String(description.clone()),
             );
         }
 
@@ -252,6 +261,19 @@ impl Queue {
         session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
+        self.push_with_description(sources, title, None, metadata, session_id, blocked_by)
+    }
+
+    /// Add a new item to the queue with description support.
+    pub fn push_with_description(
+        &self,
+        sources: Vec<Source>,
+        title: Option<String>,
+        description: Option<String>,
+        metadata: serde_json::Value,
+        session_id: Option<String>,
+        blocked_by: Vec<String>,
+    ) -> Result<Item> {
         self.validate_sources(&sources)?;
 
         self.with_exclusive_lock(|f| {
@@ -262,6 +284,7 @@ impl Queue {
             let item = Item {
                 id: generate_id(&existing_ids),
                 title,
+                description,
                 status: "pending".to_string(),
                 sources,
                 metadata,
@@ -345,6 +368,9 @@ impl Queue {
             }
             if let Some(title) = attrs.title {
                 item.title = Some(title);
+            }
+            if let Some(description) = attrs.description {
+                item.description = Some(description);
             }
             if let Some(metadata) = attrs.metadata {
                 item.metadata = metadata;
@@ -509,6 +535,7 @@ fn now_iso8601() -> String {
 pub struct UpdateAttrs {
     pub status: Option<String>,
     pub title: Option<String>,
+    pub description: Option<String>,
     pub metadata: Option<serde_json::Value>,
     pub session_id: Option<String>,
     pub blocked_by: Option<Vec<String>>,

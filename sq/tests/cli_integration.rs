@@ -48,6 +48,22 @@ fn test_add_with_title() {
 }
 
 #[test]
+fn test_add_with_description() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args([
+            "-q", &qp, "add", "--text", "content", "--description", "My description",
+        ])
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(dir.path().join("queue.jsonl")).unwrap();
+    assert!(content.contains("\"description\":\"My description\""));
+}
+
+#[test]
 fn test_add_with_metadata() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -88,7 +104,8 @@ fn test_add_json() {
 
     let output = sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "content", "--title", "My Item", "--json",
+            "-q", &qp, "add", "--text", "content", "--title", "My Item",
+            "--description", "Describe it", "--json",
         ])
         .output()
         .unwrap();
@@ -96,6 +113,7 @@ fn test_add_json() {
     assert!(output.status.success());
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["title"], "My Item");
+    assert_eq!(json["description"], "Describe it");
     assert_eq!(json["status"], "pending");
     assert!(json["id"].as_str().unwrap().len() == 3);
 }
@@ -273,7 +291,10 @@ fn test_show_json() {
     let qp = queue_path(&dir);
 
     let output = sq_cmd()
-        .args(["-q", &qp, "add", "--text", "content", "--title", "My Item"])
+        .args([
+            "-q", &qp, "add", "--text", "content", "--title", "My Item",
+            "--description", "My Description",
+        ])
         .output()
         .unwrap();
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
@@ -287,6 +308,7 @@ fn test_show_json() {
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["id"], id);
     assert_eq!(json["title"], "My Item");
+    assert_eq!(json["description"], "My Description");
     assert_eq!(json["status"], "pending");
     assert!(json["session_id"].is_null());
 }
@@ -297,7 +319,10 @@ fn test_show_human_readable() {
     let qp = queue_path(&dir);
 
     let output = sq_cmd()
-        .args(["-q", &qp, "add", "--text", "content", "--title", "My Item"])
+        .args([
+            "-q", &qp, "add", "--text", "content", "--title", "My Item",
+            "--description", "My Description",
+        ])
         .output()
         .unwrap();
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
@@ -308,6 +333,7 @@ fn test_show_human_readable() {
         .success()
         .stdout(predicate::str::contains("Item:"))
         .stdout(predicate::str::contains("Title: My Item"))
+        .stdout(predicate::str::contains("Description: My Description"))
         .stdout(predicate::str::contains("Status: pending"))
         .stdout(predicate::str::contains("Session: none"));
 }
@@ -364,6 +390,32 @@ fn test_edit_set_status() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["status"], "closed");
+}
+
+#[test]
+fn test_edit_set_description() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q", &qp, "edit", &id, "--set-description", "Updated description",
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["description"], "Updated description");
 }
 
 #[test]
@@ -716,7 +768,10 @@ fn test_json_field_order() {
     let qp = queue_path(&dir);
 
     let output = sq_cmd()
-        .args(["-q", &qp, "add", "--text", "test", "--title", "Title"])
+        .args([
+            "-q", &qp, "add", "--text", "test", "--title", "Title",
+            "--description", "Description",
+        ])
         .output()
         .unwrap();
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
@@ -727,9 +782,10 @@ fn test_json_field_order() {
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Verify field order: id, title, status, sources, metadata, session_id, created_at, updated_at
+    // Verify field order: id, title, description, status, sources, metadata, session_id, created_at, updated_at
     let id_pos = stdout.find("\"id\"").unwrap();
     let title_pos = stdout.find("\"title\"").unwrap();
+    let description_pos = stdout.find("\"description\"").unwrap();
     let status_pos = stdout.find("\"status\"").unwrap();
     let sources_pos = stdout.find("\"sources\"").unwrap();
     let metadata_pos = stdout.find("\"metadata\"").unwrap();
@@ -738,7 +794,8 @@ fn test_json_field_order() {
     let updated_at_pos = stdout.find("\"updated_at\"").unwrap();
 
     assert!(id_pos < title_pos);
-    assert!(title_pos < status_pos);
+    assert!(title_pos < description_pos);
+    assert!(description_pos < status_pos);
     assert!(status_pos < sources_pos);
     assert!(sources_pos < metadata_pos);
     assert!(metadata_pos < session_id_pos);

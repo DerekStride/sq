@@ -58,6 +58,10 @@ pub struct AddArgs {
     #[arg(long = "title", value_name = "TITLE")]
     pub title: Option<String>,
 
+    /// Description for the item
+    #[arg(long = "description", value_name = "TEXT")]
+    pub description: Option<String>,
+
     /// Attach metadata as JSON
     #[arg(long = "metadata", value_name = "JSON")]
     pub metadata: Option<String>,
@@ -144,6 +148,10 @@ pub struct EditArgs {
     /// Set title for the item
     #[arg(long = "set-title", value_name = "TITLE")]
     pub set_title: Option<String>,
+
+    /// Set description for the item
+    #[arg(long = "set-description", value_name = "TEXT")]
+    pub set_description: Option<String>,
 
     /// Set metadata as JSON (replaces full metadata object)
     #[arg(long = "set-metadata", value_name = "JSON")]
