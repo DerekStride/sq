@@ -20,7 +20,7 @@ end
 desc "Run Rust tests"
 task :test_sq_rust do
   unless ENV["SKIP_RUST"]
-    sh "cd sq-rust && cargo test"
+    sh "cd sq && cargo test"
   end
 end
 
