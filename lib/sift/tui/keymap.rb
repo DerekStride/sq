@@ -26,6 +26,11 @@ module Sift
         ["q", "quit", "#666666"],
       ].freeze
 
+      SHUTTING_DOWN = [
+        ["s", "stop agents", "#E06C75"],
+        ["q", "force quit", "#666666"],
+      ].freeze
+
       def self.render_action_bar(bindings)
         parts = bindings.map do |key, label, color|
           key_style = Lipgloss::Style.new.foreground(color).bold(true)
@@ -43,6 +48,10 @@ module Sift
 
       def self.waiting_bar
         render_action_bar(WAITING)
+      end
+
+      def self.shutting_down_bar
+        render_action_bar(SHUTTING_DOWN)
       end
     end
   end

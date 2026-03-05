@@ -32,10 +32,15 @@ module Sift
 
       Open3.popen3(*args, **spawn_opts) do |stdin, stdout, stderr, wait_thread|
         yield wait_thread.pid if block_given?
+        # Read stdout/stderr concurrently with threads (same pattern
+        # as capture3) to prevent deadlock when the subprocess fills
+        # a pipe buffer while we're blocked reading the other pipe.
+        out_reader = Thread.new { stdout.read }
+        err_reader = Thread.new { stderr.read }
         stdin.write(text)
         stdin.close
-        stdout_data = stdout.read
-        stderr_data = stderr.read
+        stdout_data = out_reader.value
+        stderr_data = err_reader.value
         status = wait_thread.value
       end
 
