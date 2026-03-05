@@ -28,6 +28,7 @@ module Sift
         @queue = Queue.new(config.queue_path)
         @client = config.dry? ? DryClient.new(config: config) : Client.new(config: config)
         @git = Git.new
+        @prime = Prime.run!
 
         # Core state
         @mode = :reviewing
@@ -485,7 +486,7 @@ module Sift
             template = File.read(path)
             parts << template.gsub("{{queue_path}}", @queue.path)
           end
-          parts << CLI::Queue::Prime.generate
+          parts << @prime.to_s
           parts.join("\n")
         end
       end
