@@ -34,5 +34,8 @@ module Sift
 
     # Editor view completed — return to reviewing
     class ViewDoneMessage < Bubbletea::Message; end
+
+    # Prompt editor completed — process editor text
+    class PromptEditorDoneMessage < Bubbletea::Message; end
   end
 end

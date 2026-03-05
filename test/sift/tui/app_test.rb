@@ -253,6 +253,19 @@ class Sift::TUI::AppTest < Minitest::Test
     app&.send(:stop_async_reactor)
   end
 
+  def test_ctrl_g_returns_exec_command
+    @queue.push(sources: [{ type: "text", content: "test" }])
+    app = build_app
+    app.init
+    app.send(:enter_prompt_mode, :item_agent, app.current_item)
+
+    _model, cmd = app.update(make_key("ctrl+g"))
+
+    assert_instance_of Bubbletea::ExecCommand, cmd
+  ensure
+    app&.send(:stop_async_reactor)
+  end
+
   # --- view_prompting tests ---
 
   def test_view_prompting_shows_prompt_ui
@@ -309,6 +322,66 @@ class Sift::TUI::AppTest < Minitest::Test
     app.update(make_key("ctrl+t"))
 
     assert_equal true, app.instance_variable_get(:@agent_options)[:create_worktree]
+  ensure
+    app&.send(:stop_async_reactor)
+  end
+
+  def test_prompt_editor_done_dispatches_agent_and_exits_prompt_mode
+    @queue.push(sources: [{ type: "text", content: "test" }])
+    app = build_app
+    app.init
+    app.instance_variable_set(:@spawn_queue, Thread::Queue.new)
+    app.send(:enter_prompt_mode, :item_agent, app.current_item)
+    app.instance_variable_set(:@editor_result, "Investigate this")
+
+    app.update(Sift::TUI::PromptEditorDoneMessage.new)
+
+    assert_equal :reviewing, app.mode
+    req = app.instance_variable_get(:@spawn_queue).pop(true)
+    assert_equal "Investigate this", req[:user_prompt]
+  ensure
+    app&.send(:stop_async_reactor)
+  end
+
+  def test_item_prompt_hides_worktree_when_item_has_valid_worktree
+    item = @queue.push(sources: [{ type: "text", content: "test" }])
+    wt = Sift::Queue::Worktree.new(path: ".sift/worktrees/#{item.id}", branch: "sift/#{item.id}")
+    @queue.update(item.id, worktree: wt)
+
+    app = build_app
+    app.init
+
+    git = app.instance_variable_get(:@git)
+    git.define_singleton_method(:worktree_valid?) { |_path| true }
+
+    updated = @queue.find(item.id)
+    Sift::Worktree.stub(:exists?, true) do
+      app.send(:enter_prompt_mode, :item_agent, updated)
+      output = app.view
+
+      refute_includes output, "Worktree"
+      refute_includes output, "Ctrl-T"
+
+      app.update(make_key("ctrl+t"))
+      assert_equal false, app.instance_variable_get(:@agent_options)[:create_worktree]
+    end
+  ensure
+    app&.send(:stop_async_reactor)
+  end
+
+  def test_item_prompt_hides_worktree_when_transcript_exists_without_worktree
+    @queue.push(sources: [{ type: "text", content: "test" }], session_id: "existing-session")
+    app = build_app
+    app.init
+    app.send(:enter_prompt_mode, :item_agent, app.current_item)
+
+    output = app.view
+
+    refute_includes output, "Worktree"
+    refute_includes output, "Ctrl-T"
+
+    app.update(make_key("ctrl+t"))
+    assert_equal false, app.instance_variable_get(:@agent_options)[:create_worktree]
   ensure
     app&.send(:stop_async_reactor)
   end

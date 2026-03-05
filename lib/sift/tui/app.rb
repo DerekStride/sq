@@ -108,6 +108,9 @@ module Sift
           refresh_items
           [self, nil]
 
+        when PromptEditorDoneMessage
+          handle_prompt_editor_done
+
         when Bubbletea::KeyMessage
           handle_key(message)
 
@@ -374,7 +377,7 @@ module Sift
         when "enter"
           submit_prompt
         when "ctrl+g"
-          submit_prompt_via_editor
+          open_prompt_editor
         when "shift+tab", "backtab"
           cycle_prompt_model
           [self, nil]
@@ -421,7 +424,7 @@ module Sift
       end
 
       def toggle_item_agent_worktree
-        return unless @prompt_target == :item_agent
+        return unless worktree_toggle_available?
 
         @agent_options[:create_worktree] = !@agent_options[:create_worktree]
       end
@@ -455,9 +458,16 @@ module Sift
         [self, nil]
       end
 
-      def submit_prompt_via_editor
+      def open_prompt_editor
         existing = @text_input.value
-        text = read_from_editor(existing)
+        callable = -> { @editor_result = read_from_editor(existing) }
+        [self, Bubbletea.exec(callable, message: PromptEditorDoneMessage.new)]
+      end
+
+      def handle_prompt_editor_done
+        text = @editor_result
+        @editor_result = nil
+
         if text.nil? || text.strip.empty?
           cancel_prompt
           return [self, nil]
@@ -726,54 +736,53 @@ module Sift
         parts.join("\n")
       end
 
+      def item_has_valid_worktree?(item)
+        return false unless item&.worktree
+        return false unless Sift::Worktree.exists?(item.id)
+
+        @git.worktree_valid?(item.worktree.path)
+      end
+
+      def worktree_toggle_available?
+        return false unless @prompt_target == :item_agent
+        item = @prompt_item
+        return false unless item
+        return false if item_has_valid_worktree?(item)
+        return false if item.session_id && item.worktree.nil?
+
+        true
+      end
+
       def render_prompt_hotkey_hint
-        if @prompt_target == :item_agent
-          parts = []
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Model")
-          parts << Styles::PROMPT_HINT.render(": ")
-          parts << Styles::PROMPT_VALUE.render(@agent_options[:model])
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Shift-Tab)")
+        parts = []
+        parts << Styles::PROMPT_CONFIG_LABEL.render("Model")
+        parts << Styles::PROMPT_HINT.render(": ")
+        parts << Styles::PROMPT_VALUE.render(@agent_options[:model])
+        parts << Styles::PROMPT_HINT.render(" ")
+        parts << Styles::PROMPT_KEY.render("(Shift-Tab)")
+
+        if @prompt_target == :item_agent && worktree_toggle_available?
           parts << Styles::PROMPT_HINT.render(" • ")
           parts << Styles::PROMPT_CONFIG_LABEL.render("Worktree")
           parts << Styles::PROMPT_HINT.render(": ")
           parts << Styles::PROMPT_VALUE.render(@agent_options[:create_worktree] ? "yes" : "no")
           parts << Styles::PROMPT_HINT.render(" ")
           parts << Styles::PROMPT_KEY.render("(Ctrl-T)")
-          parts << Styles::PROMPT_HINT.render(" • ")
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Editor")
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Ctrl-G)")
-          parts << Styles::PROMPT_HINT.render(" • ")
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Cancel")
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Esc)")
-          parts << Styles::PROMPT_HINT.render(" • ")
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Send")
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Enter)")
-          parts.join
-        else
-          parts = []
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Model")
-          parts << Styles::PROMPT_HINT.render(": ")
-          parts << Styles::PROMPT_VALUE.render(@agent_options[:model])
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Shift-Tab)")
-          parts << Styles::PROMPT_HINT.render(" • ")
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Editor")
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Ctrl-G)")
-          parts << Styles::PROMPT_HINT.render(" • ")
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Cancel")
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Esc)")
-          parts << Styles::PROMPT_HINT.render(" • ")
-          parts << Styles::PROMPT_CONFIG_LABEL.render("Send")
-          parts << Styles::PROMPT_HINT.render(" ")
-          parts << Styles::PROMPT_KEY.render("(Enter)")
-          parts.join
         end
+
+        parts << Styles::PROMPT_HINT.render(" • ")
+        parts << Styles::PROMPT_CONFIG_LABEL.render("Editor")
+        parts << Styles::PROMPT_HINT.render(" ")
+        parts << Styles::PROMPT_KEY.render("(Ctrl-G)")
+        parts << Styles::PROMPT_HINT.render(" • ")
+        parts << Styles::PROMPT_CONFIG_LABEL.render("Cancel")
+        parts << Styles::PROMPT_HINT.render(" ")
+        parts << Styles::PROMPT_KEY.render("(Esc)")
+        parts << Styles::PROMPT_HINT.render(" • ")
+        parts << Styles::PROMPT_CONFIG_LABEL.render("Send")
+        parts << Styles::PROMPT_HINT.render(" ")
+        parts << Styles::PROMPT_KEY.render("(Enter)")
+        parts.join
       end
 
       def render_status_bar
