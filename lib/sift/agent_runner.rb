@@ -13,7 +13,7 @@ module Sift
       @task = task
       @queue = queue
       @semaphore = Async::Semaphore.new(limit, parent: task)
-      @agents = {} # item_id -> { task:, prompt:, started_at:, general: }
+      @agents = {} # item_id -> { task:, pid:, prompt:, started_at:, general: }
       @general_counter = 0
     end
 
@@ -22,24 +22,26 @@ module Sift
     def spawn(item_id, prompt_text, user_prompt, session_id: nil, append_system_prompt: nil, cwd: nil, model: nil)
       Log.debug "agent spawn item=#{item_id} model=#{model || "default"} session=#{session_id || "new"} cwd=#{cwd || "(inherit)"} prompt=#{user_prompt.lines.first&.chomp}"
 
+      pid_callback = proc { |pid| @agents[item_id][:pid] = pid if @agents[item_id] }
+
       agent_task = @semaphore.async do
         Log.debug "agent running item=#{item_id}"
         if @queue
           @queue.claim(item_id) do |claimed_item|
             next nil unless claimed_item
             @client.prompt(prompt_text, session_id: session_id,
-              append_system_prompt: append_system_prompt, cwd: cwd, model: model)
+              append_system_prompt: append_system_prompt, cwd: cwd, model: model, &pid_callback)
           end
         else
           @client.prompt(prompt_text, session_id: session_id,
-            append_system_prompt: append_system_prompt, cwd: cwd, model: model)
+            append_system_prompt: append_system_prompt, cwd: cwd, model: model, &pid_callback)
         end
       rescue Client::Error => e
         Log.warn "agent error item=#{item_id}: #{e.message}"
         e
       end
 
-      @agents[item_id] = { task: agent_task, prompt: user_prompt, started_at: Time.now, general: false }
+      @agents[item_id] = { task: agent_task, pid: nil, prompt: user_prompt, started_at: Time.now, general: false }
     end
 
     # Spawn a general-purpose agent not tied to any queue item.
@@ -50,15 +52,17 @@ module Sift
 
       Log.debug "agent spawn_general key=#{key} model=#{model || "default"} prompt=#{user_prompt.lines.first&.chomp}"
 
+      pid_callback = proc { |pid| @agents[key][:pid] = pid if @agents[key] }
+
       agent_task = @semaphore.async do
         Log.debug "agent running general key=#{key}"
-        @client.prompt(prompt_text, append_system_prompt: append_system_prompt, model: model)
+        @client.prompt(prompt_text, append_system_prompt: append_system_prompt, model: model, &pid_callback)
       rescue Client::Error => e
         Log.warn "agent error general key=#{key}: #{e.message}"
         e
       end
 
-      @agents[key] = { task: agent_task, prompt: user_prompt, started_at: Time.now, general: true }
+      @agents[key] = { task: agent_task, pid: nil, prompt: user_prompt, started_at: Time.now, general: true }
     end
 
     # Check for completed agents. Returns a hash of completed results:
@@ -123,10 +127,34 @@ module Sift
       @agents.count { |_, a| a[:general] }
     end
 
-    # Stop all running agents.
+    # Send SIGINT to running agent subprocesses. Claude CLI handles
+    # SIGINT gracefully — it wraps up, saves session state, and exits
+    # with a valid response. Agents remain tracked so poll can pick
+    # up their results and save session_ids for later resumption.
+    def interrupt_agents
+      count = 0
+      @agents.each_value do |a|
+        next if a[:task].completed? || a[:task].failed?
+        next unless a[:pid]
+        Process.kill("INT", a[:pid])
+        count += 1
+      rescue Errno::ESRCH, Errno::EPERM
+        # Process already exited or not permitted
+      end
+      Log.debug "agent interrupt count=#{count}/#{@agents.size}"
+    end
+
+    # Force-stop all running agents and clear tracking immediately.
     def stop_all
       Log.debug "agent stop_all count=#{@agents.size}"
-      @agents.each_value { |a| a[:task].stop }
+      @agents.each_value do |a|
+        begin
+          Process.kill("KILL", a[:pid]) if a[:pid]
+        rescue Errno::ESRCH, Errno::EPERM
+          # already gone
+        end
+        a[:task].stop
+      end
       @agents.clear
     end
   end
