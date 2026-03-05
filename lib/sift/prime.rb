@@ -27,7 +27,16 @@ module Sift
         status = nil
 
         Timeout.timeout(2) do
-          stdout, stderr, status = Open3.capture3(*argv)
+          Open3.popen3(*argv) do |stdin, out_io, err_io, wait_thread|
+            stdin.close
+
+            out_reader = Thread.new { out_io.read }
+            err_reader = Thread.new { err_io.read }
+
+            stdout = out_reader.value
+            stderr = err_reader.value
+            status = wait_thread.value
+          end
         end
 
         unless status&.success?

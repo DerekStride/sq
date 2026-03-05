@@ -16,24 +16,43 @@ module Sift
     end
 
     # Send a prompt to Claude, optionally resuming a session.
-    # Returns Result with response text and session_id
+    # Returns Result with response text and session_id.
+    # Yields the subprocess PID if a block is given, enabling
+    # callers to send signals (e.g. SIGINT for graceful stop).
     def prompt(text, session_id: nil, append_system_prompt: nil, cwd: nil, model: nil)
       args = build_args(session_id:, append_system_prompt:, model: model)
       Log.debug "client start cmd=#{args.join(" ")} cwd=#{cwd || "(inherit)"}"
       start = Time.now
 
-      capture_opts = { stdin_data: text }
-      capture_opts[:chdir] = cwd if cwd
-      stdout, stderr, status = Open3.capture3(*args, **capture_opts)
+      spawn_opts = {}
+      spawn_opts[:chdir] = cwd if cwd
+
+      stdout_data = stderr_data = nil
+      status = nil
+
+      Open3.popen3(*args, **spawn_opts) do |stdin, stdout, stderr, wait_thread|
+        yield wait_thread.pid if block_given?
+        # Read stdout/stderr concurrently with threads (same pattern
+        # as capture3) to prevent deadlock when the subprocess fills
+        # a pipe buffer while we're blocked reading the other pipe.
+        out_reader = Thread.new { stdout.read }
+        err_reader = Thread.new { stderr.read }
+        stdin.write(text)
+        stdin.close
+        stdout_data = out_reader.value
+        stderr_data = err_reader.value
+        status = wait_thread.value
+      end
+
       elapsed = (Time.now - start).round(1)
 
       unless status.success?
-        Log.error "client failed elapsed=#{elapsed}s stderr=#{stderr.lines.first&.chomp}"
-        raise Error, "Claude CLI failed: #{stderr}"
+        Log.error "client failed elapsed=#{elapsed}s stderr=#{stderr_data.lines.first&.chomp}"
+        raise Error, "Claude CLI failed: #{stderr_data}"
       end
 
-      Log.debug "client done elapsed=#{elapsed}s bytes=#{stdout.bytesize}"
-      parse_response(stdout)
+      Log.debug "client done elapsed=#{elapsed}s bytes=#{stdout_data.bytesize}"
+      parse_response(stdout_data)
     rescue Errno::ENOENT => e
       raise Error, "Command not found: #{e.message}"
     rescue SystemCallError => e
@@ -94,7 +113,7 @@ module Sift
       @config = config
     end
 
-    def prompt(text, session_id: nil, append_system_prompt: nil, cwd: nil, model: nil)
+    def prompt(text, session_id: nil, append_system_prompt: nil, cwd: nil, model: nil, &)
       selected_model = model || @config&.agent_model
       Sift::Log.debug "[dry] model=#{selected_model || "default"} session=#{session_id || "new"} cwd=#{cwd || "(inherit)"}"
       Sift::Log.debug "[dry] prompt: #{text.lines.first&.chomp}"

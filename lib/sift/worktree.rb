@@ -80,9 +80,22 @@ module Sift
       end
 
       def run_setup_command(command, wt_path)
-        _, err, status = Open3.capture3(command, chdir: wt_path)
+        stderr = ""
+        status = nil
+
+        Open3.popen3(command, chdir: wt_path) do |stdin, out_io, err_io, wait_thread|
+          stdin.close
+
+          out_reader = Thread.new { out_io.read }
+          err_reader = Thread.new { err_io.read }
+
+          out_reader.value
+          stderr = err_reader.value
+          status = wait_thread.value
+        end
+
         unless status.success?
-          Log.warn("Worktree setup command failed: #{err.strip}")
+          Log.warn("Worktree setup command failed: #{stderr.strip}")
         end
       end
 

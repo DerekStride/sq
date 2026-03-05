@@ -22,7 +22,7 @@ module Sift
       AGENT_MODELS = ["haiku", "sonnet", "opus"].freeze
 
       attr_reader :mode, :items, :index, :flash, :flash_style,
-        :prompt_target, :width, :height
+        :prompt_target, :width, :height, :shutting_down
 
       def initialize(config:)
         @config = config
@@ -61,6 +61,9 @@ module Sift
         @agent_runner = nil
         @async_thread = nil
         @async_task = nil
+
+        # Shutdown state
+        @shutting_down = false
       end
 
       def init
@@ -129,6 +132,8 @@ module Sift
           view_prompting
         when :waiting
           view_waiting
+        when :shutting_down
+          view_shutting_down
         end
       end
 
@@ -213,6 +218,17 @@ module Sift
           handle_completed_general_agent(item_id, data)
         else
           handle_completed_item_agent(item_id, data)
+        end
+
+        if @shutting_down
+          remaining = active_count
+          if remaining == 0
+            stop_async_reactor
+            return [self, Bubbletea.quit]
+          else
+            set_flash("Shutting down — waiting for #{remaining} agent(s)...", :info)
+            return [self, nil]
+          end
         end
 
         done = refresh_items
@@ -329,6 +345,8 @@ module Sift
           handle_key_prompting(message)
         when :waiting
           handle_key_waiting(message)
+        when :shutting_down
+          handle_key_shutting_down(message)
         end
       end
 
@@ -337,8 +355,7 @@ module Sift
 
         case key
         when "q", "ctrl+c"
-          stop_async_reactor
-          [self, Bubbletea.quit]
+          begin_graceful_shutdown
         when "v"
           handle_view
         when "a"
@@ -349,8 +366,12 @@ module Sift
           return [self, nil] unless current_item
           done = handle_close(current_item)
           if done
-            stop_async_reactor
-            [self, Bubbletea.quit]
+            if active_count > 0
+              begin_graceful_shutdown
+            else
+              stop_async_reactor
+              [self, Bubbletea.quit]
+            end
           else
             [self, nil]
           end
@@ -398,11 +419,45 @@ module Sift
 
         case key
         when "q", "ctrl+c"
-          stop_async_reactor
-          [self, Bubbletea.quit]
+          begin_graceful_shutdown
         when "g"
           enter_prompt_mode(:general_agent, nil)
           [self, nil]
+        else
+          [self, nil]
+        end
+      end
+
+      # --- Shutdown ---
+
+      def begin_graceful_shutdown
+        if active_count == 0
+          # No running agents — exit immediately
+          stop_async_reactor
+          return [self, Bubbletea.quit]
+        end
+
+        @shutting_down = true
+        @mode = :shutting_down
+        set_flash("Waiting for #{active_count} agent(s) to finish...", :info)
+        [self, schedule_poll]
+      end
+
+      def force_shutdown
+        stop_async_reactor
+        [self, Bubbletea.quit]
+      end
+
+      def handle_key_shutting_down(message)
+        key = message.to_s
+
+        case key
+        when "s"
+          @agent_runner&.interrupt_agents
+          set_flash("Sent stop signal — agents wrapping up...", :info)
+          [self, nil]
+        when "ctrl+c", "q"
+          force_shutdown
         else
           [self, nil]
         end
@@ -717,6 +772,26 @@ module Sift
 
         # Action bar
         parts << "  #{Keymap.waiting_bar}"
+        parts << ""
+
+        # Status bar
+        parts << "  #{render_status_bar}"
+
+        # Flash
+        parts << "" << "  #{render_flash}" if @flash
+
+        parts.join("\n")
+      end
+
+      def view_shutting_down
+        parts = []
+        running = active_count
+        msg = Styles::WAITING_TEXT.render(
+          "Shutting down — waiting for #{running} agent#{"s" if running != 1}..."
+        )
+        parts << "  #{msg}"
+        parts << ""
+        parts << "  #{Keymap.shutting_down_bar}"
         parts << ""
 
         # Status bar
