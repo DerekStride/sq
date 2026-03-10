@@ -1,0 +1,19 @@
+{
+  "name": "sq",
+  "owner": {
+    "name": "Derek Stride",
+    "email": "derek@stride.host"
+  },
+  "plugins": [
+    {
+      "name": "sq",
+      "source": "./",
+      "description": "Queue-driven task and review management with the sq CLI.",
+      "version": "0.1.0",
+      "repository": "https://github.com/shopify-playground/sift",
+      "license": "MIT",
+      "keywords": ["queue", "task-tracking", "sift", "sq"],
+      "skills": ["./skills/"]
+    }
+  ]
+}
