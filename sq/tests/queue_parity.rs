@@ -94,7 +94,10 @@ fn test_session_id_always_serialized() {
         updated_at: "2025-01-01T12:00:00.000Z".to_string(),
     };
     let json = item.to_json_string();
-    assert!(json.contains("\"session_id\":null"), "session_id must appear even when null");
+    assert!(
+        json.contains("\"session_id\":null"),
+        "session_id must appear even when null"
+    );
 }
 
 #[test]
@@ -119,11 +122,26 @@ fn test_optional_fields_omitted_when_empty() {
         updated_at: "2025-01-01T12:00:00.000Z".to_string(),
     };
     let json = item.to_json_string();
-    assert!(!json.contains("\"title\""), "title should be omitted when None");
-    assert!(!json.contains("\"description\""), "description should be omitted when None");
-    assert!(!json.contains("\"worktree\""), "worktree should be omitted when None");
-    assert!(!json.contains("\"blocked_by\""), "blocked_by should be omitted when empty");
-    assert!(!json.contains("\"errors\""), "errors should be omitted when empty");
+    assert!(
+        !json.contains("\"title\""),
+        "title should be omitted when None"
+    );
+    assert!(
+        !json.contains("\"description\""),
+        "description should be omitted when None"
+    );
+    assert!(
+        !json.contains("\"worktree\""),
+        "worktree should be omitted when None"
+    );
+    assert!(
+        !json.contains("\"blocked_by\""),
+        "blocked_by should be omitted when empty"
+    );
+    assert!(
+        !json.contains("\"errors\""),
+        "errors should be omitted when empty"
+    );
 }
 
 #[test]
@@ -133,7 +151,10 @@ fn test_worktree_serialization() {
         branch: Some("sift/abc".to_string()),
     };
     let json = wt.to_json_value().to_string();
-    assert_eq!(json, r#"{"path":".sift/worktrees/abc","branch":"sift/abc"}"#);
+    assert_eq!(
+        json,
+        r#"{"path":".sift/worktrees/abc","branch":"sift/abc"}"#
+    );
 }
 
 // ── Queue Operation Tests ───────────────────────────────────────────────────
@@ -173,7 +194,10 @@ fn test_push_validates_empty_sources() {
     let queue = test_queue(&dir);
     let result = queue.push(vec![], None, serde_json::json!({}), None, vec![]);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Sources cannot be empty"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Sources cannot be empty"));
 }
 
 #[test]
@@ -243,7 +267,8 @@ fn test_push_with_description_requires_some_content_when_sources_empty() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
-    let result = queue.push_with_description(vec![], None, None, serde_json::json!({}), None, vec![]);
+    let result =
+        queue.push_with_description(vec![], None, None, serde_json::json!({}), None, vec![]);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -268,7 +293,10 @@ fn test_push_validates_source_type() {
         vec![],
     );
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Invalid source type"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid source type"));
 }
 
 #[test]
@@ -292,7 +320,11 @@ fn test_push_unique_ids() {
                 vec![],
             )
             .unwrap();
-        assert!(ids.insert(item.id.clone()), "Duplicate ID generated: {}", item.id);
+        assert!(
+            ids.insert(item.id.clone()),
+            "Duplicate ID generated: {}",
+            item.id
+        );
     }
 }
 
@@ -674,8 +706,16 @@ fn test_timestamp_format() {
 
     // Format: YYYY-MM-DDTHH:MM:SS.mmmZ
     let re = regex_lite(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$");
-    assert!(re.is_match(&item.created_at), "Bad timestamp format: {}", item.created_at);
-    assert!(re.is_match(&item.updated_at), "Bad timestamp format: {}", item.updated_at);
+    assert!(
+        re.is_match(&item.created_at),
+        "Bad timestamp format: {}",
+        item.created_at
+    );
+    assert!(
+        re.is_match(&item.updated_at),
+        "Bad timestamp format: {}",
+        item.updated_at
+    );
 }
 
 // Simple regex matcher without importing regex crate
@@ -694,8 +734,12 @@ impl RegexLite {
             }
             // Check positions: YYYY-MM-DDTHH:MM:SS.mmmZ
             let chars: Vec<char> = s.chars().collect();
-            chars[4] == '-' && chars[7] == '-' && chars[10] == 'T'
-                && chars[13] == ':' && chars[16] == ':' && chars[19] == '.'
+            chars[4] == '-'
+                && chars[7] == '-'
+                && chars[10] == 'T'
+                && chars[13] == ':'
+                && chars[16] == ':'
+                && chars[19] == '.'
                 && chars[23] == 'Z'
                 && chars.iter().enumerate().all(|(i, c)| {
                     if [4, 7, 10, 13, 16, 19, 23].contains(&i) {
@@ -731,8 +775,13 @@ fn test_id_format() {
             )
             .unwrap();
         assert_eq!(item.id.len(), 3);
-        assert!(item.id.chars().all(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()),
-            "ID contains invalid chars: {}", item.id);
+        assert!(
+            item.id
+                .chars()
+                .all(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            "ID contains invalid chars: {}",
+            item.id
+        );
     }
 }
 

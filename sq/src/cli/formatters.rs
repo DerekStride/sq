@@ -51,10 +51,7 @@ pub fn print_item_detail(item: &Item) {
     println!("Status: {}", item.status);
     println!("Created: {}", item.created_at);
     println!("Updated: {}", item.updated_at);
-    println!(
-        "Session: {}",
-        item.session_id.as_deref().unwrap_or("none")
-    );
+    println!("Session: {}", item.session_id.as_deref().unwrap_or("none"));
 
     if !item.blocked_by.is_empty() {
         println!("Blocked by: {}", item.blocked_by.join(", "));

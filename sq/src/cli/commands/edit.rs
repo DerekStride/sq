@@ -196,21 +196,14 @@ fn deep_merge(current: serde_json::Value, patch: serde_json::Value) -> serde_jso
     }
 }
 
-fn source_value(
-    type_: &str,
-    path: Option<&str>,
-    content: Option<&str>,
-) -> serde_json::Value {
+fn source_value(type_: &str, path: Option<&str>, content: Option<&str>) -> serde_json::Value {
     let mut map = serde_json::Map::new();
     map.insert(
         "type".to_string(),
         serde_json::Value::String(type_.to_string()),
     );
     if let Some(p) = path {
-        map.insert(
-            "path".to_string(),
-            serde_json::Value::String(p.to_string()),
-        );
+        map.insert("path".to_string(), serde_json::Value::String(p.to_string()));
     }
     if let Some(c) = content {
         map.insert(
