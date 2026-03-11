@@ -1202,14 +1202,28 @@ fn test_collect_unsupported_input_fails_atomically() {
 }
 
 #[test]
-fn test_collect_appears_in_help() {
+fn test_collect_appears_in_main_help() {
     sq_cmd()
         .args(["--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("collect"))
+        .stdout(predicate::str::contains("Manage Sift's review queue").not())
+        .stdout(predicate::str::contains("rg --json PATTERN | sq collect --by-file").not());
+}
+
+#[test]
+fn test_collect_examples_appear_in_collect_help() {
+    sq_cmd()
+        .args(["collect", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Examples:"))
         .stdout(predicate::str::contains(
             "rg --json PATTERN | sq collect --by-file",
+        ))
+        .stdout(predicate::str::contains(
+            "Collect items from stdin into queue items",
         ));
 }
 

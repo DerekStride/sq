@@ -3,16 +3,11 @@ pub mod collect;
 pub mod queue;
 pub mod queue_path;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(
-    name = "sq",
-    version,
-    about = "Manage Sift's review queue",
-    after_help = "Stdin collection:\n  rg --json PATTERN | sq collect --by-file\n  rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{filepath}}\""
-)]
+#[command(name = "sq", version)]
 pub struct Cli {
     /// Path to queue file
     #[arg(short = 'q', long = "queue", value_name = "PATH", global = true)]
@@ -26,7 +21,7 @@ pub struct Cli {
 pub enum Commands {
     /// Add a new item to the review queue
     Add(AddArgs),
-    /// Collect items from stdin into the review queue
+    /// Collect items from stdin into queue items
     Collect(CollectArgs),
     /// List queue items
     List(ListArgs),
@@ -85,7 +80,11 @@ pub struct AddArgs {
     pub json: bool,
 }
 
-#[derive(Parser)]
+#[derive(Args)]
+#[command(
+    about = "Collect items from stdin into queue items",
+    after_help = "Examples:\n  rg --json PATTERN | sq collect --by-file\n  rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{filepath}}\""
+)]
 pub struct CollectArgs {
     /// Split stdin into one item per file
     #[arg(long = "by-file")]
