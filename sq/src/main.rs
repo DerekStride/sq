@@ -1,8 +1,9 @@
-use clap::Parser;
-use sift_queue::{Cli, Commands};
+use clap::FromArgMatches;
+use sift_queue::{build_cli, Cli, Commands};
 
 fn main() {
-    let cli = Cli::parse();
+    let matches = build_cli().get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
     let queue_path = sift_queue::queue_path::resolve_queue_path(cli.queue.as_ref());
 
     let exit_code = match cli.command {

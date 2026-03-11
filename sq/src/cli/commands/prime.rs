@@ -1,5 +1,4 @@
 use anyhow::Result;
-use clap::CommandFactory;
 
 /// Execute the `sq prime` command.
 pub fn execute() -> Result<i32> {
@@ -33,7 +32,7 @@ Sift is a queue-driven review system where **humans make decisions** and **agent
 }
 
 fn generate_command_reference() -> String {
-    let cmd = crate::Cli::command();
+    let cmd = crate::build_cli();
     let mut lines = Vec::new();
 
     for sub in cmd.get_subcommands() {
