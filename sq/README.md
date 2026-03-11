@@ -17,7 +17,7 @@ pi install https://github.com/DerekStride/sift
 ### Claude
 
 ```bash
-claude plugin marketplace install https://github.com/DerekStride/sift
+claude plugin marketplace add https://github.com/DerekStride/sift
 claude plugin install sq
 ```
 
