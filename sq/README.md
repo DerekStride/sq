@@ -30,6 +30,7 @@ You can override it with:
 ## Commands
 
 - `sq add` — create an item
+- `sq collect` — collect many items from stdin
 - `sq list` — list items
 - `sq show <id>` — show item details
 - `sq edit <id>` — edit item fields/sources
@@ -50,6 +51,9 @@ sq add --title "Refactor parser" --description "Split command logic"
 
 # Add item with metadata
 sq add --metadata '{"pi_tasks":{"priority":"high"}}'
+
+# Collect one item per file from ripgrep JSON
+rg --json PATTERN | sq collect --by-file
 
 # List open items (default excludes closed)
 sq list

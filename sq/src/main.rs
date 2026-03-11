@@ -7,6 +7,9 @@ fn main() {
 
     let exit_code = match cli.command {
         Commands::Add(ref args) => sift_queue::cli::commands::add::execute(args, queue_path),
+        Commands::Collect(ref args) => {
+            sift_queue::cli::commands::collect::execute(args, queue_path)
+        }
         Commands::List(ref args) => sift_queue::cli::commands::list::execute(args, queue_path),
         Commands::Show(ref args) => sift_queue::cli::commands::show::execute(args, queue_path),
         Commands::Edit(ref args) => sift_queue::cli::commands::edit::execute(args, queue_path),
