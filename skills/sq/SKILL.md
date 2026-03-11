@@ -1,6 +1,6 @@
 ---
 name: sq
-description: Queue management CLI for task tracking and review workflows. Use when managing queue items, adding tasks, listing work, or integrating with sift review loops.
+description: Queue management CLI for task tracking and review workflows. Use when managing queue items, collecting work from search results, listing queue state, or integrating with sift review loops.
 license: MIT
 compatibility: Requires sq CLI. Install from https://github.com/shopify-playground/sift
 allowed-tools: Bash(sq:*)
@@ -8,7 +8,14 @@ allowed-tools: Bash(sq:*)
 
 # sq — Queue CLI
 
-`sq` manages items in a JSONL queue file. Items have typed sources (text, diff, file, directory), statuses, metadata, and dependency tracking.
+`sq` manages items in a JSONL queue file. Items have typed sources, statuses, metadata, and dependency tracking.
+
+Use this skill when you need to:
+
+- add or edit queue items directly
+- inspect queue state
+- build a queue from search results with `sq collect --by-file`
+- prepare work for the `sift` review loop
 
 ## Queue Path
 
@@ -16,6 +23,8 @@ By default, `sq` resolves the queue path from Sift defaults. Override with:
 
 - `-q, --queue <PATH>` flag
 - `SIFT_QUEUE_PATH` environment variable
+
+When operating on a project-specific queue, prefer an explicit queue path.
 
 ## Commands
 
@@ -41,6 +50,80 @@ sq add --metadata '{"priority":"p0","taskType":"bug"}'
 | `--metadata JSON` | Attach metadata as JSON |
 | `--blocked-by IDS` | Comma-separated blocker IDs |
 | `--json` | Output as JSON |
+
+### `sq collect --by-file` — Build one queue item per file from ripgrep results
+
+Use `collect` when you already have a stream of findings and want to turn them into a queue quickly.
+
+Canonical pattern:
+
+```bash
+rg --json PATTERN | sq collect --by-file
+```
+
+Recommended variants:
+
+```bash
+# Include line numbers and context in each created text source
+rg --json -n -C2 PATTERN | sq collect --by-file
+
+# Add a shared description to every created item
+rg --json -n -C2 PATTERN | sq collect --by-file \
+  --description "Migrate PATTERN to Y"
+
+# Add shared metadata
+rg --json PATTERN | sq collect --by-file \
+  --metadata '{"kind":"migration","priority":"p2"}'
+
+# Customize titles per file
+rg --json PATTERN | sq collect --by-file \
+  --title-template 'migrate: {{filepath}}'
+```
+
+What `collect --by-file` does:
+
+- reads piped stdin
+- expects `rg --json` input
+- groups results by file
+- creates one queue item per file
+- attaches:
+  - a `file` source for the grouped file path
+  - a `text` source containing the grouped match/context lines
+
+Important constraints:
+
+- plain-text `rg` output is not supported
+- use `rg --json`
+- use `-n`, `-C`, `-A`, or `-B` on `rg` when you want more useful context in the created `text` source
+
+Supported shared flags:
+
+- `--title`
+- `--description`
+- `--title-template`
+- `--metadata`
+- `--blocked-by`
+- `--json`
+
+Default title template:
+
+```text
+{{match_count}}:{{filepath}}
+```
+
+Template variables:
+
+- `{{filepath}}`
+- `{{filename}}`
+- `{{match_count}}`
+
+Good use cases:
+
+- migration queues
+- API rename sweeps
+- deprecation cleanup
+- TODO / FIXME triage
+- turning repeated search matches into reviewable work
 
 ### `sq list` — List queue items
 
@@ -128,12 +211,27 @@ Items carry typed sources that provide context:
 
 | Type | Added via | Description |
 |------|-----------|-------------|
-| `text` | `--text`, `--stdin text` | Free-form text |
+| `text` | `--text`, `--stdin text`, `collect --by-file` | Free-form text or collected ripgrep snippets |
 | `diff` | `--diff`, `--stdin diff` | Patch/diff content |
-| `file` | `--file`, `--stdin file` | File content |
+| `file` | `--file`, `--stdin file`, `collect --by-file` | File path/context |
 | `directory` | `--directory`, `--stdin directory` | Directory listing |
 | `transcript` | `--add-transcript` | Agent conversation transcript |
 
 ## Dependencies
 
 Items can declare blockers via `--blocked-by`. Use `sq list --ready` to see only items that are pending and have no open blockers.
+
+## Suggested collect workflow
+
+When a user wants to remove or migrate a repeated pattern across a codebase:
+
+```bash
+rg --json -n -C2 'OldThing' | sq collect --by-file \
+  --description 'Replace OldThing with NewThing' \
+  --metadata '{"kind":"migration"}'
+
+sq list
+sq show <id>
+```
+
+This gives a per-file review queue with both the file path and the specific matching snippets preserved.

@@ -29,8 +29,8 @@ You can override it with:
 
 ## Commands
 
-- `sq add` — create an item
-- `sq collect` — collect many items from stdin
+- `sq add` — create a single item
+- `sq collect` — create many items from piped stdin
 - `sq list` — list items
 - `sq show <id>` — show item details
 - `sq edit <id>` — edit item fields/sources
@@ -55,11 +55,20 @@ sq add --metadata '{"pi_tasks":{"priority":"high"}}'
 # Collect one item per file from ripgrep JSON
 rg --json PATTERN | sq collect --by-file
 
+# Include line numbers and surrounding context in each collected text source
+rg --json -n -C2 PATTERN | sq collect --by-file
+
 # Add shared description to every created item
-rg --json -n -C2 PATTERN | sq collect --by-file --description "Migrate PATTERN to Y"
+rg --json -n -C2 PATTERN | sq collect --by-file \
+  --description "Migrate PATTERN to Y"
 
 # Template titles using filepath / filename / match_count
-rg --json PATTERN | sq collect --by-file --title-template 'migrate: {{filepath}}'
+rg --json PATTERN | sq collect --by-file \
+  --title-template 'migrate: {{filepath}}'
+
+# Attach shared metadata while collecting
+rg --json PATTERN | sq collect --by-file \
+  --metadata '{"campaign":"pattern-removal","priority":"p2"}'
 
 # List open items (default excludes closed)
 sq list
@@ -82,26 +91,51 @@ sq close abc
 
 ## `sq collect --by-file`
 
-`sq collect --by-file` reads piped stdin and creates one queue item per file.
+`sq collect --by-file` is the bulk-ingestion workflow for turning search results into review items.
+
+A common pattern is:
+
+1. search the codebase with `rg --json`
+2. group results by file
+3. create one queue item per file
+4. review or delegate that queue in `sift`
+
+Example:
+
+```bash
+rg --json -n -C2 'OldApi.call' | sq collect --by-file \
+  --description "Migrate OldApi.call to NewApi.call"
+```
 
 ### Supported input
 
-Currently supported in v1:
+Currently supported:
 
 - `rg --json`
 
-Plain-text `rg` output is not supported yet.
+Plain-text `rg` output is not supported.
 
-### Item shape
+If you want surrounding context in each created `text` source, pass ripgrep context flags such as:
 
-Each created item gets:
+- `-n` for line numbers
+- `-C2` for two lines of context
+- `-A2` / `-B2` for after / before context
+
+### What each collected item contains
+
+For each file group, `sq collect --by-file` creates:
 
 1. a `file` source for the filepath
-2. a `text` source with collected match/context lines
+2. a `text` source containing the grouped ripgrep match/context lines
 
-If no title is provided, the default title template is `{{match_count}}:{{filepath}}`.
+This makes the queue item easy to inspect later:
 
-### Supported flags
+- the `file` source points at the file
+- the `text` source preserves the specific matches that caused the item to be created
+
+### Shared flags
+
+These flags apply to every created item:
 
 - `--title`
 - `--description`
@@ -110,11 +144,56 @@ If no title is provided, the default title template is `{{match_count}}:{{filepa
 - `--blocked-by`
 - `--json`
 
+### Title behavior
+
+If you do not provide `--title` or `--title-template`, the default title template is:
+
+```text
+{{match_count}}:{{filepath}}
+```
+
+That keeps bulk-created queues scannable in `sq list`.
+
+Examples:
+
+```bash
+# Static title for every item
+rg --json PATTERN | sq collect --by-file --title "Pattern cleanup"
+
+# Templated titles per file
+rg --json PATTERN | sq collect --by-file \
+  --title-template 'cleanup: {{filename}} ({{match_count}} matches)'
+```
+
 ### Title template variables
 
-- `{{filepath}}`
-- `{{filename}}`
-- `{{match_count}}`
+Available in `--title-template`:
+
+- `{{filepath}}` — full grouped file path
+- `{{filename}}` — basename of `{{filepath}}`
+- `{{match_count}}` — number of ripgrep `match` events collected for that file
+
+### Suggested migration / cleanup workflow
+
+When you want to build a queue from repeated occurrences across a codebase:
+
+```bash
+rg --json -n -C2 'OldThing' | sq collect --by-file \
+  --description 'Replace OldThing with NewThing' \
+  --metadata '{"kind":"migration"}'
+
+sq list
+sq show <id>
+sift
+```
+
+This is especially useful for:
+
+- migrations
+- API renames
+- deprecations
+- TODO / FIXME sweeps
+- repeated code smell cleanup
 
 ## Status values
 

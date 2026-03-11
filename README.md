@@ -70,6 +70,8 @@ sq add --system-prompt prompts/review.md       # Add with per-item system prompt
 sq add --metadata '{"priority":"high"}'        # Add with metadata
 sq add --text "Depends on x" --blocked-by a1b  # Add with dependency
 
+rg --json 'OldThing' | sq collect --by-file    # One queue item per file from search results
+
 sq list                                        # List all items
 sq list --status pending                       # Filter by status
 sq list --ready                                # Pending + unblocked

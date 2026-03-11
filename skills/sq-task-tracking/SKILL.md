@@ -1,6 +1,6 @@
 ---
 name: sq-task-tracking
-description: Generic guide for using the `sq` (Sift Queue) CLI as a task tracker across projects. Covers queue conventions, safe command patterns, and common add/list/show/edit/close workflows.
+description: Generic guide for using the `sq` (Sift Queue) CLI as a task tracker across projects. Covers queue conventions, safe command patterns, collect-based queue seeding, and common add/list/show/edit/close workflows.
 license: MIT
 allowed-tools: Bash(sq:*)
 ---
@@ -16,7 +16,7 @@ Use this skill when you are asked to manage tasks with the `sq` CLI.
 
 ## Preflight Checklist
 
-Before writing (`add`, `edit`, `close`, `rm`):
+Before writing (`add`, `collect`, `edit`, `close`, `rm`):
 
 1. Confirm queue file path.
 2. Use `--queue <path>` explicitly.
@@ -26,8 +26,11 @@ Before writing (`add`, `edit`, `close`, `rm`):
 ## Canonical Command Patterns
 
 ```bash
-# Add
+# Add one item
 sq --queue .sift/issues.jsonl add --title "..." --description "..." --text "..."
+
+# Collect many items from ripgrep results
+rg --json PATTERN | sq --queue .sift/issues.jsonl collect --by-file
 
 # List
 sq --queue .sift/issues.jsonl list --status pending --json
@@ -41,6 +44,62 @@ sq --queue .sift/issues.jsonl edit <id> --set-status in_progress
 # Close
 sq --queue .sift/issues.jsonl close <id>
 ```
+
+## Seeding a Queue from Search Results
+
+A strong `sq` pattern is:
+
+1. search for a repeated pattern in a repo
+2. group matches by file
+3. create one task per file
+4. review and work the queue
+
+Use:
+
+```bash
+rg --json -n -C2 'OldThing' | sq --queue .sift/issues.jsonl collect --by-file \
+  --description 'Replace OldThing with NewThing'
+```
+
+Why this is useful:
+
+- each file becomes its own task
+- the task keeps a `file` source for the path
+- the task keeps a `text` source with the exact matching snippets
+- the resulting queue is easy to inspect with `sq list`, `sq show`, or `sift`
+
+Recommended options:
+
+```bash
+# Add context around matches
+rg --json -n -C2 'PATTERN' | sq --queue .sift/issues.jsonl collect --by-file
+
+# Attach metadata to all created tasks
+rg --json PATTERN | sq --queue .sift/issues.jsonl collect --by-file \
+  --metadata '{"priority":"p2","taskType":"chore"}'
+
+# Customize titles per file
+rg --json PATTERN | sq --queue .sift/issues.jsonl collect --by-file \
+  --title-template 'cleanup: {{filepath}}'
+```
+
+Important constraints:
+
+- use `rg --json`
+- plain-text `rg` output is not supported
+- prefer `-n` and `-C` when you want richer context preserved in the created tasks
+
+Default title template:
+
+```text
+{{match_count}}:{{filepath}}
+```
+
+Template variables:
+
+- `{{filepath}}`
+- `{{filename}}`
+- `{{match_count}}`
 
 ## Status Conventions
 
@@ -64,6 +123,14 @@ sq --queue .sift/issues.jsonl add \
   --text "Refactor ..." \
   --metadata '{"priority":"p1","taskType":"feature"}' \
   --json
+```
+
+Collect example:
+
+```bash
+rg --json -n -C2 'legacy_method' | sq --queue .sift/issues.jsonl collect --by-file \
+  --description 'Migrate legacy_method to new_method' \
+  --metadata '{"priority":"p1","taskType":"chore"}'
 ```
 
 ## Safety Rule
