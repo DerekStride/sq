@@ -193,10 +193,7 @@ impl Source {
             serde_json::Value::String(self.type_.clone()),
         );
         if let Some(ref path) = self.path {
-            map.insert(
-                "path".to_string(),
-                serde_json::Value::String(path.clone()),
-            );
+            map.insert("path".to_string(), serde_json::Value::String(path.clone()));
         }
         if let Some(ref content) = self.content {
             map.insert(
@@ -226,10 +223,7 @@ impl Worktree {
     pub fn to_json_value(&self) -> serde_json::Value {
         let mut map = serde_json::Map::new();
         if let Some(ref path) = self.path {
-            map.insert(
-                "path".to_string(),
-                serde_json::Value::String(path.clone()),
-            );
+            map.insert("path".to_string(), serde_json::Value::String(path.clone()));
         }
         if let Some(ref branch) = self.branch {
             map.insert(
@@ -245,6 +239,15 @@ impl Worktree {
 
 pub struct Queue {
     pub path: PathBuf,
+}
+
+pub struct NewItem {
+    pub sources: Vec<Source>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub metadata: serde_json::Value,
+    pub session_id: Option<String>,
+    pub blocked_by: Vec<String>,
 }
 
 impl Queue {
@@ -275,42 +278,61 @@ impl Queue {
         session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
-        let has_metadata = match &metadata {
-            serde_json::Value::Object(map) => !map.is_empty(),
-            _ => true,
+        let new_item = NewItem {
+            sources,
+            title,
+            description,
+            metadata,
+            session_id,
+            blocked_by,
         };
 
-        if sources.is_empty() && title.is_none() && description.is_none() && !has_metadata {
-            anyhow::bail!("Item requires at least one source, title, description, or metadata");
+        let mut items = self.push_many_with_description(vec![new_item])?;
+        Ok(items.remove(0))
+    }
+
+    /// Add many new items to the queue under a single lock.
+    pub fn push_many_with_description(&self, items: Vec<NewItem>) -> Result<Vec<Item>> {
+        if items.is_empty() {
+            anyhow::bail!("At least one item is required");
         }
-        self.validate_source_types(&sources)?;
+
+        for item in &items {
+            self.validate_new_item(item)?;
+        }
 
         self.with_exclusive_lock(|f| {
             let existing = read_items(f, &self.path);
-            let existing_ids: HashSet<String> = existing.iter().map(|i| i.id.clone()).collect();
-
+            let mut existing_ids: HashSet<String> = existing.iter().map(|i| i.id.clone()).collect();
             let now = now_iso8601();
-            let item = Item {
-                id: generate_id(&existing_ids),
-                title,
-                description,
-                status: "pending".to_string(),
-                sources,
-                metadata,
-                session_id,
-                worktree: None,
-                blocked_by,
-                errors: Vec::new(),
-                created_at: now.clone(),
-                updated_at: now,
-            };
+            let mut created = Vec::with_capacity(items.len());
 
-            // Append to end of file
             f.seek(std::io::SeekFrom::End(0))?;
-            writeln!(f, "{}", item.to_json_string())?;
+            for new_item in items {
+                let id = generate_id(&existing_ids);
+                existing_ids.insert(id.clone());
+
+                let item = Item {
+                    id,
+                    title: new_item.title,
+                    description: new_item.description,
+                    status: "pending".to_string(),
+                    sources: new_item.sources,
+                    metadata: new_item.metadata,
+                    session_id: new_item.session_id,
+                    worktree: None,
+                    blocked_by: new_item.blocked_by,
+                    errors: Vec::new(),
+                    created_at: now.clone(),
+                    updated_at: now.clone(),
+                };
+
+                writeln!(f, "{}", item.to_json_string())?;
+                created.push(item);
+            }
             f.flush()?;
 
-            Ok(item)
+            Ok(created)
         })
     }
 
@@ -427,6 +449,23 @@ impl Queue {
         self.validate_source_types(sources)
     }
 
+    fn validate_new_item(&self, item: &NewItem) -> Result<()> {
+        let has_metadata = match &item.metadata {
+            serde_json::Value::Object(map) => !map.is_empty(),
+            _ => true,
+        };
+
+        if item.sources.is_empty()
+            && item.title.is_none()
+            && item.description.is_none()
+            && !has_metadata
+        {
+            anyhow::bail!("Item requires at least one source, title, description, or metadata");
+        }
+
+        self.validate_source_types(&item.sources)
+    }
+
     fn validate_source_types(&self, sources: &[Source]) -> Result<()> {
         for source in sources {
             if !VALID_SOURCE_TYPES.contains(&source.type_.as_str()) {
@@ -531,7 +570,9 @@ fn generate_id(existing_ids: &HashSet<String>) -> String {
     let chars: Vec<char> = ('a'..='z').chain('0'..='9').collect();
     let mut rng = rand::thread_rng();
     loop {
-        let id: String = (0..3).map(|_| chars[rng.gen_range(0..chars.len())]).collect();
+        let id: String = (0..3)
+            .map(|_| chars[rng.gen_range(0..chars.len())])
+            .collect();
         if !existing_ids.contains(&id) {
             return id;
         }
@@ -540,7 +581,9 @@ fn generate_id(existing_ids: &HashSet<String>) -> String {
 
 /// Current UTC time in ISO 8601 with millisecond precision.
 fn now_iso8601() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 /// Attributes for updating an item.

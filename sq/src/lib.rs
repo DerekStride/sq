@@ -1,12 +1,13 @@
 pub mod cli;
+pub mod collect;
 pub mod queue;
 pub mod queue_path;
 
-use clap::{Parser, Subcommand};
+use clap::{builder::StyledStr, Args, Command, CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "sq", version, about = "Manage Sift's review queue")]
+#[command(name = "sq", version)]
 pub struct Cli {
     /// Path to queue file
     #[arg(short = 'q', long = "queue", value_name = "PATH", global = true)]
@@ -16,10 +17,25 @@ pub struct Cli {
     pub command: Commands,
 }
 
+pub fn build_cli() -> Command {
+    Cli::command().mut_subcommand("collect", |subcmd| {
+        let styles = subcmd.get_styles();
+        let header = styles.get_header();
+        let literal = styles.get_literal();
+        let help = StyledStr::from(format!(
+            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\"{literal:#}\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
+        ));
+
+        subcmd.after_help(help)
+    })
+}
+
 #[derive(Subcommand)]
 pub enum Commands {
     /// Add a new item to the review queue
     Add(AddArgs),
+    /// Collect items from stdin into queue items
+    Collect(CollectArgs),
     /// List queue items
     List(ListArgs),
     /// Show details of a queue item
@@ -63,6 +79,42 @@ pub struct AddArgs {
     /// Description for the item
     #[arg(long = "description", value_name = "TEXT")]
     pub description: Option<String>,
+
+    /// Attach metadata as JSON
+    #[arg(long = "metadata", value_name = "JSON")]
+    pub metadata: Option<String>,
+
+    /// Comma-separated blocker IDs
+    #[arg(long = "blocked-by", value_name = "IDS")]
+    pub blocked_by: Option<String>,
+
+    /// Output as JSON
+    #[arg(long = "json")]
+    pub json: bool,
+}
+
+#[derive(Args)]
+#[command(about = "Collect items from stdin into queue items")]
+pub struct CollectArgs {
+    /// Split stdin into one item per file
+    #[arg(long = "by-file")]
+    pub by_file: bool,
+
+    /// Input format: currently only rg-json is supported
+    #[arg(long = "stdin-format", value_name = "FORMAT")]
+    pub stdin_format: Option<String>,
+
+    /// Title for every created item
+    #[arg(long = "title", value_name = "TITLE")]
+    pub title: Option<String>,
+
+    /// Description for every created item
+    #[arg(long = "description", value_name = "TEXT")]
+    pub description: Option<String>,
+
+    /// Template for each created item title
+    #[arg(long = "title-template", value_name = "TEMPLATE")]
+    pub title_template: Option<String>,
 
     /// Attach metadata as JSON
     #[arg(long = "metadata", value_name = "JSON")]

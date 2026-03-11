@@ -63,7 +63,9 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
     let has_metadata = args.metadata.is_some();
 
     if !has_source && !has_description && !has_title && !has_metadata {
-        eprintln!("Error: At least one of --description, --title, --metadata, or a source is required");
+        eprintln!(
+            "Error: At least one of --description, --title, --metadata, or a source is required"
+        );
         eprintln!("Use --diff, --file, --text, --directory, --stdin, --description, --title, or --metadata");
         return Ok(1);
     }

@@ -1,4 +1,5 @@
 pub mod add;
+pub mod collect;
 pub mod edit;
 pub mod list;
 pub mod prime;

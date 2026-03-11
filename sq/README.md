@@ -30,6 +30,7 @@ You can override it with:
 ## Commands
 
 - `sq add` — create an item
+- `sq collect` — collect many items from stdin
 - `sq list` — list items
 - `sq show <id>` — show item details
 - `sq edit <id>` — edit item fields/sources
@@ -51,6 +52,15 @@ sq add --title "Refactor parser" --description "Split command logic"
 # Add item with metadata
 sq add --metadata '{"pi_tasks":{"priority":"high"}}'
 
+# Collect one item per file from ripgrep JSON
+rg --json PATTERN | sq collect --by-file
+
+# Add shared description to every created item
+rg --json -n -C2 PATTERN | sq collect --by-file --description "Migrate PATTERN to Y"
+
+# Template titles using filepath / filename / match_count
+rg --json PATTERN | sq collect --by-file --title-template 'migrate: {{filepath}}'
+
 # List open items (default excludes closed)
 sq list
 
@@ -61,6 +71,7 @@ sq list --all
 sq add --text "X" --json
 sq edit abc --set-status closed --json
 sq rm abc --json
+rg --json PATTERN | sq collect --by-file --json
 
 # Merge metadata patch
 sq edit abc --merge-metadata '{"pi_tasks":{"priority":"low"}}'
@@ -68,6 +79,42 @@ sq edit abc --merge-metadata '{"pi_tasks":{"priority":"low"}}'
 # Close item quickly
 sq close abc
 ```
+
+## `sq collect --by-file`
+
+`sq collect --by-file` reads piped stdin and creates one queue item per file.
+
+### Supported input
+
+Currently supported in v1:
+
+- `rg --json`
+
+Plain-text `rg` output is not supported yet.
+
+### Item shape
+
+Each created item gets:
+
+1. a `file` source for the filepath
+2. a `text` source with collected match/context lines
+
+If no title is provided, the default title template is `{{match_count}}:{{filepath}}`.
+
+### Supported flags
+
+- `--title`
+- `--description`
+- `--title-template`
+- `--metadata`
+- `--blocked-by`
+- `--json`
+
+### Title template variables
+
+- `{{filepath}}`
+- `{{filename}}`
+- `{{match_count}}`
 
 ## Status values
 

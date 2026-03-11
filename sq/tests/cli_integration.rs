@@ -11,6 +11,18 @@ fn queue_path(dir: &TempDir) -> String {
     dir.path().join("queue.jsonl").to_str().unwrap().to_string()
 }
 
+fn rg_json_input() -> &'static str {
+    concat!(
+        "{\"type\":\"begin\",\"data\":{\"path\":{\"text\":\"app/models/a.rb\"}}}\n",
+        "{\"type\":\"match\",\"data\":{\"path\":{\"text\":\"app/models/a.rb\"},\"lines\":{\"text\":\"foo\\n\"},\"line_number\":1}}\n",
+        "{\"type\":\"context\",\"data\":{\"path\":{\"text\":\"app/models/a.rb\"},\"lines\":{\"text\":\"bar\\n\"},\"line_number\":2}}\n",
+        "{\"type\":\"end\",\"data\":{\"path\":{\"text\":\"app/models/a.rb\"}}}\n",
+        "{\"type\":\"begin\",\"data\":{\"path\":{\"text\":\"lib/b.rb\"}}}\n",
+        "{\"type\":\"match\",\"data\":{\"path\":{\"text\":\"lib/b.rb\"},\"lines\":{\"text\":\"baz\\n\"},\"line_number\":4}}\n",
+        "{\"type\":\"end\",\"data\":{\"path\":{\"text\":\"lib/b.rb\"}}}\n"
+    )
+}
+
 // ── Add Command ─────────────────────────────────────────────────────────────
 
 #[test]
@@ -54,7 +66,13 @@ fn test_add_with_description() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "content", "--description", "My description",
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "content",
+            "--description",
+            "My description",
         ])
         .assert()
         .success();
@@ -70,8 +88,13 @@ fn test_add_with_metadata() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "content",
-            "--metadata", r#"{"workflow":"analyze"}"#,
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "content",
+            "--metadata",
+            r#"{"workflow":"analyze"}"#,
         ])
         .assert()
         .success();
@@ -87,8 +110,13 @@ fn test_add_with_blocked_by() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "content",
-            "--blocked-by", "abc,def",
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "content",
+            "--blocked-by",
+            "abc,def",
         ])
         .assert()
         .success();
@@ -104,8 +132,16 @@ fn test_add_json() {
 
     let output = sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "content", "--title", "My Item",
-            "--description", "Describe it", "--json",
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "content",
+            "--title",
+            "My Item",
+            "--description",
+            "Describe it",
+            "--json",
         ])
         .output()
         .unwrap();
@@ -125,10 +161,15 @@ fn test_add_multiple_sources() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "add",
-            "--text", "some text",
-            "--diff", "changes.patch",
-            "--file", "main.rb",
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "some text",
+            "--diff",
+            "changes.patch",
+            "--file",
+            "main.rb",
         ])
         .assert()
         .success();
@@ -273,8 +314,7 @@ fn test_list_json() {
         .unwrap();
 
     assert!(output.status.success());
-    let json: serde_json::Value =
-        serde_json::from_slice(&output.stdout).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(json.is_array());
     assert_eq!(json.as_array().unwrap().len(), 1);
 }
@@ -385,7 +425,15 @@ fn test_list_ready() {
 
     // Add blocked item
     sq_cmd()
-        .args(["-q", &qp, "add", "--text", "blocked", "--blocked-by", &blocker_id])
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+        ])
         .assert()
         .success();
 
@@ -408,8 +456,15 @@ fn test_show_json() {
 
     let output = sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "content", "--title", "My Item",
-            "--description", "My Description",
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "content",
+            "--title",
+            "My Item",
+            "--description",
+            "My Description",
         ])
         .output()
         .unwrap();
@@ -436,8 +491,15 @@ fn test_show_human_readable() {
 
     let output = sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "content", "--title", "My Item",
-            "--description", "My Description",
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "content",
+            "--title",
+            "My Item",
+            "--description",
+            "My Description",
         ])
         .output()
         .unwrap();
@@ -521,7 +583,12 @@ fn test_edit_set_description() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "edit", &id, "--set-description", "Updated description",
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--set-description",
+            "Updated description",
         ])
         .assert()
         .success();
@@ -563,8 +630,13 @@ fn test_edit_merge_metadata_deep_merge() {
 
     let output = sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "test",
-            "--metadata", r#"{"pi_tasks":{"priority":"low","type":"bug"},"owner":"derek"}"#,
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "test",
+            "--metadata",
+            r#"{"pi_tasks":{"priority":"low","type":"bug"},"owner":"derek"}"#,
         ])
         .output()
         .unwrap();
@@ -572,8 +644,12 @@ fn test_edit_merge_metadata_deep_merge() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "edit", &id,
-            "--merge-metadata", r#"{"pi_tasks":{"priority":"high"}}"#,
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--merge-metadata",
+            r#"{"pi_tasks":{"priority":"high"}}"#,
         ])
         .assert()
         .success();
@@ -596,8 +672,13 @@ fn test_edit_merge_metadata_array_replace_and_null() {
 
     let output = sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "test",
-            "--metadata", r#"{"labels":["a","b"],"pi_tasks":{"due":"2026-03-10"}}"#,
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "test",
+            "--metadata",
+            r#"{"labels":["a","b"],"pi_tasks":{"due":"2026-03-10"}}"#,
         ])
         .output()
         .unwrap();
@@ -605,8 +686,12 @@ fn test_edit_merge_metadata_array_replace_and_null() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "edit", &id,
-            "--merge-metadata", r#"{"labels":["urgent"],"pi_tasks":{"due":null}}"#,
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--merge-metadata",
+            r#"{"labels":["urgent"],"pi_tasks":{"due":null}}"#,
         ])
         .assert()
         .success();
@@ -636,7 +721,9 @@ fn test_edit_merge_metadata_invalid_non_object_fails() {
         .args(["-q", &qp, "edit", &id, "--merge-metadata", "[]"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--merge-metadata must be a JSON object"));
+        .stderr(predicate::str::contains(
+            "--merge-metadata must be a JSON object",
+        ));
 }
 
 #[test]
@@ -652,13 +739,20 @@ fn test_edit_set_and_merge_metadata_mutually_exclusive() {
 
     sq_cmd()
         .args([
-            "-q", &qp, "edit", &id,
-            "--set-metadata", "{}",
-            "--merge-metadata", "{}",
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--set-metadata",
+            "{}",
+            "--merge-metadata",
+            "{}",
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--set-metadata and --merge-metadata are mutually exclusive"));
+        .stderr(predicate::str::contains(
+            "--set-metadata and --merge-metadata are mutually exclusive",
+        ));
 }
 
 #[test]
@@ -667,7 +761,15 @@ fn test_edit_add_and_rm_source() {
     let qp = queue_path(&dir);
 
     let output = sq_cmd()
-        .args(["-q", &qp, "add", "--text", "original", "--text", "remove me"])
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "original",
+            "--text",
+            "remove me",
+        ])
         .output()
         .unwrap();
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
@@ -675,9 +777,14 @@ fn test_edit_add_and_rm_source() {
     // Remove second source (index 1) and add a new one
     sq_cmd()
         .args([
-            "-q", &qp, "edit", &id,
-            "--rm-source", "1",
-            "--add-text", "replacement",
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--rm-source",
+            "1",
+            "--add-text",
+            "replacement",
         ])
         .assert()
         .success();
@@ -901,6 +1008,232 @@ fn test_rm_not_found() {
         .stderr(predicate::str::contains("Item not found: zzz"));
 }
 
+// ── Collect Command ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_collect_by_file_rg_json() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "collect", "--by-file"])
+        .write_stdin(rg_json_input())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let ids: Vec<&str> = stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert_eq!(ids.len(), 2);
+
+    let content = fs::read_to_string(dir.path().join("queue.jsonl")).unwrap();
+    assert!(content.contains("\"path\":\"app/models/a.rb\""));
+    assert!(content.contains("\"path\":\"lib/b.rb\""));
+    assert!(content.contains("\"title\":\"1:app/models/a.rb\""));
+    assert!(content.contains("\"title\":\"1:lib/b.rb\""));
+    assert!(content.contains("1: foo\\n2: bar"));
+    assert!(content.contains("4: baz"));
+}
+
+#[test]
+fn test_collect_by_file_with_title_template() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "collect",
+            "--by-file",
+            "--title-template",
+            "collect {{filename}} ({{match_count}})",
+        ])
+        .write_stdin(rg_json_input())
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(dir.path().join("queue.jsonl")).unwrap();
+    assert!(content.contains("\"title\":\"collect a.rb (1)\""));
+    assert!(content.contains("\"title\":\"collect b.rb (1)\""));
+}
+
+#[test]
+fn test_collect_by_file_json_output_returns_full_items() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "collect",
+            "--by-file",
+            "--description",
+            "Migrate",
+            "--json",
+        ])
+        .write_stdin(rg_json_input())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["status"], "pending");
+    assert_eq!(items[0]["description"], "Migrate");
+    assert_eq!(items[0]["sources"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn test_collect_by_file_with_description_metadata_and_blocked_by() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "collect",
+            "--by-file",
+            "--description",
+            "Remove foo",
+            "--metadata",
+            r#"{"kind":"migration"}"#,
+            "--blocked-by",
+            "abc,def",
+            "--json",
+        ])
+        .write_stdin(rg_json_input())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["description"], "Remove foo");
+    assert_eq!(items[0]["metadata"]["kind"], "migration");
+    assert_eq!(items[0]["blocked_by"], serde_json::json!(["abc", "def"]));
+}
+
+#[test]
+fn test_collect_by_file_empty_stdin_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "collect", "--by-file"])
+        .write_stdin("")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no stdin input received"));
+}
+
+#[test]
+fn test_collect_requires_split_mode() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "collect"])
+        .write_stdin(rg_json_input())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("collect requires a split mode"));
+}
+
+#[test]
+fn test_collect_title_and_title_template_are_mutually_exclusive() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "collect",
+            "--by-file",
+            "--title",
+            "x",
+            "--title-template",
+            "{{filepath}}",
+        ])
+        .write_stdin(rg_json_input())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--title and --title-template are mutually exclusive",
+        ));
+}
+
+#[test]
+fn test_collect_top_level_by_file_without_subcommand_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "--by-file"])
+        .write_stdin(rg_json_input())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument '--by-file'"));
+}
+
+#[test]
+fn test_collect_unsupported_input_fails_atomically() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "collect", "--by-file"])
+        .write_stdin("app/models/a.rb:1:foo\n")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "could not detect a supported stdin format",
+        ));
+
+    assert!(!dir.path().join("queue.jsonl").exists());
+}
+
+#[test]
+fn test_collect_appears_in_main_help() {
+    sq_cmd()
+        .args(["--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("collect"))
+        .stdout(predicate::str::contains("Manage Sift's review queue").not())
+        .stdout(predicate::str::contains("rg --json PATTERN | sq collect --by-file").not());
+}
+
+#[test]
+fn test_collect_examples_and_templates_appear_in_collect_help() {
+    sq_cmd()
+        .args(["collect", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Examples:"))
+        .stdout(predicate::str::contains("Templates:"))
+        .stdout(predicate::str::contains(
+            "rg --json PATTERN | sq collect --by-file",
+        ))
+        .stdout(predicate::str::contains("{{filepath}}"))
+        .stdout(predicate::str::contains("{{filename}}"))
+        .stdout(predicate::str::contains("{{match_count}}"))
+        .stdout(predicate::str::contains(
+            "Default title template: {{match_count}}:{{filepath}}",
+        ))
+        .stdout(predicate::str::contains(
+            "Collect items from stdin into queue items",
+        ));
+}
+
 // ── Prime Command ───────────────────────────────────────────────────────────
 
 #[test]
@@ -909,9 +1242,12 @@ fn test_prime_output() {
         .args(["prime"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("# Sift — Queue-Driven Review System"))
+        .stdout(predicate::str::contains(
+            "# Sift — Queue-Driven Review System",
+        ))
         .stdout(predicate::str::contains("## `sq` Commands"))
         .stdout(predicate::str::contains("### `sq add`"))
+        .stdout(predicate::str::contains("### `sq collect`"))
         .stdout(predicate::str::contains("### `sq list`"))
         .stdout(predicate::str::contains("### `sq show`"))
         .stdout(predicate::str::contains("### `sq edit`"))
@@ -955,8 +1291,15 @@ fn test_json_field_order() {
 
     let output = sq_cmd()
         .args([
-            "-q", &qp, "add", "--text", "test", "--title", "Title",
-            "--description", "Description",
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "test",
+            "--title",
+            "Title",
+            "--description",
+            "Description",
         ])
         .output()
         .unwrap();

@@ -49,7 +49,8 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     }
 
     if args.json {
-        let values: Vec<serde_json::Value> = items.iter().map(|i: &Item| i.to_json_value()).collect();
+        let values: Vec<serde_json::Value> =
+            items.iter().map(|i: &Item| i.to_json_value()).collect();
         let json = serde_json::to_string_pretty(&values)?;
         println!("{}", json);
     } else if items.is_empty() {
@@ -71,7 +72,8 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
 
 /// Run a jq expression on items, returning parsed results or None on error.
 fn jq_filter(items: &[Item], expr: &str) -> Option<Vec<Item>> {
-    let json_values: Vec<serde_json::Value> = items.iter().map(|i: &Item| i.to_json_value()).collect();
+    let json_values: Vec<serde_json::Value> =
+        items.iter().map(|i: &Item| i.to_json_value()).collect();
     let json = serde_json::to_string(&json_values).ok()?;
 
     let mut child = Command::new("jq")
