@@ -22,11 +22,11 @@ pub fn build_cli() -> Command {
         let styles = subcmd.get_styles();
         let header = styles.get_header();
         let literal = styles.get_literal();
-        let examples = StyledStr::from(format!(
-            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\"{literal:#}"
+        let help = StyledStr::from(format!(
+            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\"{literal:#}\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
         ));
 
-        subcmd.after_help(examples)
+        subcmd.after_help(help)
     })
 }
 

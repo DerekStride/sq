@@ -35,7 +35,9 @@ pub fn render_title(
     title_template: Option<&str>,
     item: &GroupedItem,
 ) -> Result<String> {
-    if let Some(template) = title_template {
+    let template = title_template.unwrap_or("{{match_count}}:{{filepath}}");
+
+    if title_template.is_some() {
         let rendered = template
             .replace("{{filepath}}", &item.filepath)
             .replace("{{filename}}", filename_for(&item.filepath))
@@ -47,7 +49,10 @@ pub fn render_title(
         return Ok(title.to_string());
     }
 
-    Ok(item.filepath.clone())
+    Ok(template
+        .replace("{{filepath}}", &item.filepath)
+        .replace("{{filename}}", filename_for(&item.filepath))
+        .replace("{{match_count}}", &item.match_count.to_string()))
 }
 
 #[cfg(test)]
@@ -114,10 +119,10 @@ mod tests {
     }
 
     #[test]
-    fn test_render_title_defaults_to_filepath() {
+    fn test_render_title_defaults_to_match_count_and_filepath() {
         assert_eq!(
             render_title(None, None, &grouped_item()).unwrap(),
-            "lib/a.rb"
+            "2:lib/a.rb"
         );
     }
 }

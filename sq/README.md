@@ -99,7 +99,7 @@ Each created item gets:
 1. a `file` source for the filepath
 2. a `text` source with collected match/context lines
 
-If no title is provided, the default title is the filepath.
+If no title is provided, the default title template is `{{match_count}}:{{filepath}}`.
 
 ### Supported flags
 

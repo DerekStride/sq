@@ -1032,8 +1032,8 @@ fn test_collect_by_file_rg_json() {
     let content = fs::read_to_string(dir.path().join("queue.jsonl")).unwrap();
     assert!(content.contains("\"path\":\"app/models/a.rb\""));
     assert!(content.contains("\"path\":\"lib/b.rb\""));
-    assert!(content.contains("\"title\":\"app/models/a.rb\""));
-    assert!(content.contains("\"title\":\"lib/b.rb\""));
+    assert!(content.contains("\"title\":\"1:app/models/a.rb\""));
+    assert!(content.contains("\"title\":\"1:lib/b.rb\""));
     assert!(content.contains("1: foo\\n2: bar"));
     assert!(content.contains("4: baz"));
 }
@@ -1213,14 +1213,21 @@ fn test_collect_appears_in_main_help() {
 }
 
 #[test]
-fn test_collect_examples_appear_in_collect_help() {
+fn test_collect_examples_and_templates_appear_in_collect_help() {
     sq_cmd()
         .args(["collect", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Examples:"))
+        .stdout(predicate::str::contains("Templates:"))
         .stdout(predicate::str::contains(
             "rg --json PATTERN | sq collect --by-file",
+        ))
+        .stdout(predicate::str::contains("{{filepath}}"))
+        .stdout(predicate::str::contains("{{filename}}"))
+        .stdout(predicate::str::contains("{{match_count}}"))
+        .stdout(predicate::str::contains(
+            "Default title template: {{match_count}}:{{filepath}}",
         ))
         .stdout(predicate::str::contains(
             "Collect items from stdin into queue items",
