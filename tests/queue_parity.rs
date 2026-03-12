@@ -1,4 +1,4 @@
-use sift_queue::queue::{parse_priority_value, Item, Queue, Source, UpdateAttrs, Worktree};
+use sift_queue::queue::{parse_priority_value, Item, Queue, Source, UpdateAttrs};
 use std::collections::HashSet;
 use tempfile::TempDir;
 
@@ -7,11 +7,11 @@ fn test_queue(dir: &TempDir) -> Queue {
     Queue::new(path)
 }
 
-// ── JSONL Round-trip Tests ──────────────────────────────────────────────────
+// ── JSONL Parsing + Serialization Tests ─────────────────────────────────────
 
 #[test]
 fn test_parse_minimal_item() {
-    let json = r#"{"id":"abc","status":"pending","sources":[{"type":"text","content":"Hello world"}],"metadata":{},"session_id":null,"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}"#;
+    let json = r#"{"id":"abc","status":"pending","sources":[{"type":"text","content":"Hello world"}],"metadata":{},"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}"#;
     let item: Item = serde_json::from_str(json).unwrap();
     assert_eq!(item.id, "abc");
     assert_eq!(item.status, "pending");
@@ -20,19 +20,19 @@ fn test_parse_minimal_item() {
     assert_eq!(item.sources.len(), 1);
     assert_eq!(item.sources[0].type_, "text");
     assert_eq!(item.sources[0].content.as_deref(), Some("Hello world"));
-    assert!(item.session_id.is_none());
-    assert!(item.worktree.is_none());
     assert!(item.blocked_by.is_empty());
     assert!(item.errors.is_empty());
 
-    // Round-trip: serialize and compare
-    let serialized = item.to_json_string();
-    assert_eq!(serialized, json);
+    let serialized = item.to_json_value();
+    assert_eq!(serialized["id"], "abc");
+    assert_eq!(serialized["status"], "pending");
+    assert!(serialized.get("created_at").is_some());
+    assert!(serialized.get("updated_at").is_some());
 }
 
 #[test]
 fn test_parse_full_item() {
-    let json = r#"{"id":"x1y","title":"Fix login bug","status":"in_progress","priority":1,"sources":[{"type":"diff","path":"/changes.patch","session_id":"sess123"},{"type":"text","content":"Summary"}],"metadata":{"workflow":"analyze"},"session_id":"sess456","created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:05:00.000Z","worktree":{"path":".sift/worktrees/x1y","branch":"sift/x1y"},"blocked_by":["abc","def"],"errors":[{"message":"timeout","timestamp":"2025-01-01T12:01:00.000Z"}]}"#;
+    let json = r#"{"id":"x1y","title":"Fix login bug","status":"in_progress","priority":1,"sources":[{"type":"diff","path":"/changes.patch"},{"type":"text","content":"Summary"}],"metadata":{"workflow":"analyze"},"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:05:00.000Z","blocked_by":["abc","def"],"errors":[{"message":"timeout","timestamp":"2025-01-01T12:01:00.000Z"}]}"#;
     let item: Item = serde_json::from_str(json).unwrap();
     assert_eq!(item.id, "x1y");
     assert_eq!(item.title.as_deref(), Some("Fix login bug"));
@@ -40,14 +40,13 @@ fn test_parse_full_item() {
     assert_eq!(item.status, "in_progress");
     assert_eq!(item.priority, Some(1));
     assert_eq!(item.sources.len(), 2);
-    assert_eq!(item.session_id.as_deref(), Some("sess456"));
-    assert!(item.worktree.is_some());
     assert_eq!(item.blocked_by, vec!["abc", "def"]);
     assert_eq!(item.errors.len(), 1);
 
-    // Round-trip
-    let serialized = item.to_json_string();
-    assert_eq!(serialized, json);
+    let serialized = item.to_json_value();
+    assert_eq!(serialized["priority"], 1);
+    assert_eq!(serialized["blocked_by"], serde_json::json!(["abc", "def"]));
+    assert_eq!(serialized["errors"].as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -60,55 +59,25 @@ fn test_parse_priority_value_accepts_numeric_only() {
 }
 
 #[test]
-fn test_source_round_trip() {
-    // Source with only type
+fn test_source_serialization() {
     let json = r#"{"type":"directory","path":"/some/dir"}"#;
     let source: Source = serde_json::from_str(json).unwrap();
     assert_eq!(source.type_, "directory");
     assert_eq!(source.path.as_deref(), Some("/some/dir"));
     assert!(source.content.is_none());
-    let serialized = source.to_json_value().to_string();
-    assert_eq!(serialized, json);
+    let serialized = source.to_json_value();
+    assert_eq!(serialized["type"], "directory");
+    assert_eq!(serialized["path"], "/some/dir");
 }
 
 #[test]
-fn test_unknown_source_type_round_trip() {
-    // Source types are free-form strings; unknown types must round-trip
+fn test_unknown_source_type_serialization() {
     let json = r#"{"type":"transcript","path":"/session.jsonl"}"#;
     let source: Source = serde_json::from_str(json).unwrap();
     assert_eq!(source.type_, "transcript");
-    let serialized = source.to_json_value().to_string();
-    assert_eq!(serialized, json);
-}
-
-#[test]
-fn test_session_id_always_serialized() {
-    // Even when null, session_id must appear in JSON output
-    let item = Item {
-        id: "abc".to_string(),
-        title: None,
-        description: None,
-        status: "pending".to_string(),
-        priority: None,
-        sources: vec![Source {
-            type_: "text".to_string(),
-            path: None,
-            content: Some("test".to_string()),
-            session_id: None,
-        }],
-        metadata: serde_json::json!({}),
-        session_id: None,
-        worktree: None,
-        blocked_by: Vec::new(),
-        errors: Vec::new(),
-        created_at: "2025-01-01T12:00:00.000Z".to_string(),
-        updated_at: "2025-01-01T12:00:00.000Z".to_string(),
-    };
-    let json = item.to_json_string();
-    assert!(
-        json.contains("\"session_id\":null"),
-        "session_id must appear even when null"
-    );
+    let serialized = source.to_json_value();
+    assert_eq!(serialized["type"], "transcript");
+    assert_eq!(serialized["path"], "/session.jsonl");
 }
 
 #[test]
@@ -123,11 +92,8 @@ fn test_optional_fields_omitted_when_empty() {
             type_: "text".to_string(),
             path: None,
             content: Some("test".to_string()),
-            session_id: None,
         }],
         metadata: serde_json::json!({}),
-        session_id: None,
-        worktree: None,
         blocked_by: Vec::new(),
         errors: Vec::new(),
         created_at: "2025-01-01T12:00:00.000Z".to_string(),
@@ -143,29 +109,12 @@ fn test_optional_fields_omitted_when_empty() {
         "description should be omitted when None"
     );
     assert!(
-        !json.contains("\"worktree\""),
-        "worktree should be omitted when None"
-    );
-    assert!(
         !json.contains("\"blocked_by\""),
         "blocked_by should be omitted when empty"
     );
     assert!(
         !json.contains("\"errors\""),
         "errors should be omitted when empty"
-    );
-}
-
-#[test]
-fn test_worktree_serialization() {
-    let wt = Worktree {
-        path: Some(".sift/worktrees/abc".to_string()),
-        branch: Some("sift/abc".to_string()),
-    };
-    let json = wt.to_json_value().to_string();
-    assert_eq!(
-        json,
-        r#"{"path":".sift/worktrees/abc","branch":"sift/abc"}"#
     );
 }
 
@@ -182,12 +131,10 @@ fn test_push_and_find() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("Hello".to_string()),
-                session_id: None,
-            }],
+                }],
             Some("Test".to_string()),
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -205,7 +152,7 @@ fn test_push_and_find() {
 fn test_push_validates_empty_sources() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
-    let result = queue.push(vec![], None, None, serde_json::json!({}), None, vec![]);
+    let result = queue.push(vec![], None, None, serde_json::json!({}), vec![]);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -225,7 +172,6 @@ fn test_push_with_description_allows_empty_sources() {
             Some("Description".to_string()),
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -247,7 +193,6 @@ fn test_push_with_title_allows_empty_sources() {
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -269,7 +214,6 @@ fn test_push_with_metadata_allows_empty_sources() {
             None,
             None,
             serde_json::json!({"kind":"task"}),
-            None,
             vec![],
         )
         .unwrap();
@@ -284,7 +228,7 @@ fn test_push_with_description_requires_some_content_when_sources_empty() {
     let queue = test_queue(&dir);
 
     let result =
-        queue.push_with_description(vec![], None, None, None, serde_json::json!({}), None, vec![]);
+        queue.push_with_description(vec![], None, None, None, serde_json::json!({}), vec![]);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -301,12 +245,10 @@ fn test_push_validates_source_type() {
             type_: "invalid".to_string(),
             path: None,
             content: Some("test".to_string()),
-            session_id: None,
         }],
         None,
         None,
         serde_json::json!({}),
-        None,
         vec![],
     );
     assert!(result.is_err());
@@ -329,12 +271,10 @@ fn test_push_unique_ids() {
                     type_: "text".to_string(),
                     path: None,
                     content: Some("test".to_string()),
-                    session_id: None,
-                }],
+                        }],
                 None,
                 None,
                 serde_json::json!({}),
-                None,
                 vec![],
             )
             .unwrap();
@@ -357,12 +297,10 @@ fn test_all_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("first".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -372,12 +310,10 @@ fn test_all_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("second".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -406,12 +342,10 @@ fn test_filter_by_status() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -432,12 +366,10 @@ fn test_filter_by_status() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test2".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -463,12 +395,10 @@ fn test_ready_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocker".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -479,12 +409,10 @@ fn test_ready_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocked".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![blocker.id.clone()],
         )
         .unwrap();
@@ -505,12 +433,10 @@ fn test_ready_unblocks_after_close() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocker".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -521,12 +447,10 @@ fn test_ready_unblocks_after_close() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocked".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![blocker.id.clone()],
         )
         .unwrap();
@@ -558,12 +482,10 @@ fn test_update_item() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -603,7 +525,6 @@ fn test_update_can_clear_priority() {
             None,
             Some(1),
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -633,12 +554,10 @@ fn test_update_invalid_status() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -681,12 +600,10 @@ fn test_remove_item() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -714,9 +631,9 @@ fn test_corrupt_line_skipped() {
     let path = dir.path().join("queue.jsonl");
     std::fs::write(
         &path,
-        r#"{"id":"abc","status":"pending","sources":[{"type":"text","content":"good"}],"metadata":{},"session_id":null,"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}
+        r#"{"id":"abc","status":"pending","sources":[{"type":"text","content":"good"}],"metadata":{},"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}
 this is not valid json
-{"id":"def","status":"pending","sources":[{"type":"text","content":"also good"}],"metadata":{},"session_id":null,"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}
+{"id":"def","status":"pending","sources":[{"type":"text","content":"also good"}],"metadata":{},"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}
 "#,
     )
     .unwrap();
@@ -735,7 +652,7 @@ fn test_empty_lines_skipped() {
     std::fs::write(
         &path,
         r#"
-{"id":"abc","status":"pending","sources":[{"type":"text","content":"test"}],"metadata":{},"session_id":null,"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}
+{"id":"abc","status":"pending","sources":[{"type":"text","content":"test"}],"metadata":{},"created_at":"2025-01-01T12:00:00.000Z","updated_at":"2025-01-01T12:00:00.000Z"}
 
 "#,
     )
@@ -757,12 +674,10 @@ fn test_timestamp_format() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({}),
-            None,
             vec![],
         )
         .unwrap();
@@ -829,12 +744,10 @@ fn test_id_format() {
                     type_: "text".to_string(),
                     path: None,
                     content: Some("test".to_string()),
-                    session_id: None,
-                }],
+                        }],
                 None,
                 None,
                 serde_json::json!({}),
-                None,
                 vec![],
             )
             .unwrap();
@@ -860,12 +773,10 @@ fn test_metadata_preserved() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                session_id: None,
-            }],
+                }],
             None,
             None,
             serde_json::json!({"nested": {"key": "value"}, "array": [1, 2, 3]}),
-            None,
             vec![],
         )
         .unwrap();
@@ -875,17 +786,19 @@ fn test_metadata_preserved() {
     assert_eq!(found.metadata["array"], serde_json::json!([1, 2, 3]));
 }
 
-// ── Fixture-based Round-trip Test ───────────────────────────────────────────
+// ── Fixture-based Parsing Test ──────────────────────────────────────────────
 
 #[test]
-fn test_fixture_round_trip() {
+fn test_fixture_items_parse() {
     let fixture = include_str!("fixtures/queue_samples.jsonl");
-    for line in fixture.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let item: Item = serde_json::from_str(line).unwrap();
-        let serialized = item.to_json_string();
-        assert_eq!(serialized, line, "Round-trip mismatch for item {}", item.id);
-    }
+    let items: Vec<Item> = fixture
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0].id, "abc");
+    assert_eq!(items[1].id, "x1y");
+    assert_eq!(items[2].id, "z99");
 }

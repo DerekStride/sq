@@ -59,16 +59,9 @@ pub fn print_item_detail(item: &Item) {
     }
     println!("Created: {}", item.created_at);
     println!("Updated: {}", item.updated_at);
-    println!("Session: {}", item.session_id.as_deref().unwrap_or("none"));
 
     if !item.blocked_by.is_empty() {
         println!("Blocked by: {}", item.blocked_by.join(", "));
-    }
-
-    if let Some(ref wt) = item.worktree {
-        let branch = wt.branch.as_deref().unwrap_or("");
-        let path = wt.path.as_deref().unwrap_or("");
-        println!("Worktree: {} {}", branch, path);
     }
 
     if let serde_json::Value::Object(ref map) = item.metadata {

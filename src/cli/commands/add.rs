@@ -15,7 +15,6 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
             type_: "diff".to_string(),
             path: Some(path.clone()),
             content: None,
-            session_id: None,
         });
     }
 
@@ -24,7 +23,6 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
             type_: "file".to_string(),
             path: Some(path.clone()),
             content: None,
-            session_id: None,
         });
     }
 
@@ -33,7 +31,6 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
             type_: "text".to_string(),
             path: None,
             content: Some(text.clone()),
-            session_id: None,
         });
     }
 
@@ -42,7 +39,6 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
             type_: "directory".to_string(),
             path: Some(path.clone()),
             content: None,
-            session_id: None,
         });
     }
 
@@ -53,7 +49,6 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
             type_: stdin_type.clone(),
             path: None,
             content: Some(content),
-            session_id: None,
         });
     }
 
@@ -107,7 +102,6 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
         args.description.clone(),
         priority,
         metadata,
-        None,
         blocked_by,
     )?;
 

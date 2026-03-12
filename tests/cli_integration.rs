@@ -536,7 +536,6 @@ fn test_show_json() {
     assert_eq!(json["title"], "My Item");
     assert_eq!(json["description"], "My Description");
     assert_eq!(json["status"], "pending");
-    assert!(json["session_id"].is_null());
 }
 
 #[test]
@@ -567,8 +566,7 @@ fn test_show_human_readable() {
         .stdout(predicate::str::contains("Item:"))
         .stdout(predicate::str::contains("Title: My Item"))
         .stdout(predicate::str::contains("Description: My Description"))
-        .stdout(predicate::str::contains("Status: pending"))
-        .stdout(predicate::str::contains("Session: none"));
+        .stdout(predicate::str::contains("Status: pending"));
 }
 
 #[test]
@@ -1591,5 +1589,4 @@ fn test_json_output_includes_priority_when_present() {
 
     assert_eq!(json["id"], id);
     assert_eq!(json["priority"], 1);
-    assert!(json["session_id"].is_null());
 }

@@ -110,20 +110,17 @@ pub fn execute(args: &CollectArgs, queue_path: PathBuf) -> Result<i32> {
                     type_: "file".to_string(),
                     path: Some(grouped_item.filepath.clone()),
                     content: None,
-                    session_id: None,
-                },
+                        },
                 Source {
                     type_: "text".to_string(),
                     path: None,
                     content: Some(grouped_item.text.clone()),
-                    session_id: None,
-                },
+                        },
             ],
             title: Some(title),
             description: args.description.clone(),
             priority,
             metadata: metadata.clone(),
-            session_id: None,
             blocked_by: blocked_by.clone(),
         });
     }

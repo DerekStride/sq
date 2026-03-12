@@ -39,11 +39,8 @@ pub struct Item {
 
     pub metadata: serde_json::Value,
 
-    /// Always serialized, even when null.
-    pub session_id: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub worktree: Option<Worktree>,
+    pub created_at: String,
+    pub updated_at: String,
 
     #[serde(skip_serializing_if = "is_empty_vec")]
     #[serde(default)]
@@ -52,9 +49,6 @@ pub struct Item {
     #[serde(skip_serializing_if = "is_empty_json_vec")]
     #[serde(default)]
     pub errors: Vec<serde_json::Value>,
-
-    pub created_at: String,
-    pub updated_at: String,
 }
 
 fn is_empty_vec(v: &[String]) -> bool {
@@ -65,95 +59,15 @@ fn is_empty_json_vec(v: &[serde_json::Value]) -> bool {
     v.is_empty()
 }
 
-/// Serialize items explicitly so JSON output stays stable and `session_id`
-/// is always present even when null, while optional fields remain omitted.
+/// Serialize items through serde so the struct definition is the source of
+/// truth for JSON output.
 impl Item {
     pub fn to_json_value(&self) -> serde_json::Value {
-        let mut map = serde_json::Map::new();
-
-        map.insert("id".to_string(), serde_json::Value::String(self.id.clone()));
-
-        // title/description go right after id, before status (only if present)
-        if let Some(ref title) = self.title {
-            map.insert(
-                "title".to_string(),
-                serde_json::Value::String(title.clone()),
-            );
-        }
-        if let Some(ref description) = self.description {
-            map.insert(
-                "description".to_string(),
-                serde_json::Value::String(description.clone()),
-            );
-        }
-
-        map.insert(
-            "status".to_string(),
-            serde_json::Value::String(self.status.clone()),
-        );
-
-        if let Some(priority) = self.priority {
-            map.insert(
-                "priority".to_string(),
-                serde_json::Value::Number(serde_json::Number::from(priority)),
-            );
-        }
-
-        map.insert(
-            "sources".to_string(),
-            serde_json::Value::Array(self.sources.iter().map(|s| s.to_json_value()).collect()),
-        );
-
-        map.insert("metadata".to_string(), self.metadata.clone());
-
-        map.insert(
-            "session_id".to_string(),
-            match &self.session_id {
-                Some(s) => serde_json::Value::String(s.clone()),
-                None => serde_json::Value::Null,
-            },
-        );
-
-        map.insert(
-            "created_at".to_string(),
-            serde_json::Value::String(self.created_at.clone()),
-        );
-        map.insert(
-            "updated_at".to_string(),
-            serde_json::Value::String(self.updated_at.clone()),
-        );
-
-        // worktree after updated_at, only if present
-        if let Some(ref wt) = self.worktree {
-            map.insert("worktree".to_string(), wt.to_json_value());
-        }
-
-        // blocked_by after worktree, only if non-empty
-        if !self.blocked_by.is_empty() {
-            map.insert(
-                "blocked_by".to_string(),
-                serde_json::Value::Array(
-                    self.blocked_by
-                        .iter()
-                        .map(|s| serde_json::Value::String(s.clone()))
-                        .collect(),
-                ),
-            );
-        }
-
-        // errors after blocked_by, only if non-empty
-        if !self.errors.is_empty() {
-            map.insert(
-                "errors".to_string(),
-                serde_json::Value::Array(self.errors.clone()),
-            );
-        }
-
-        serde_json::Value::Object(map)
+        serde_json::to_value(self).expect("item serialization should succeed")
     }
 
     pub fn to_json_string(&self) -> String {
-        self.to_json_value().to_string()
+        serde_json::to_string(self).expect("item serialization should succeed")
     }
 
     pub fn pending(&self) -> bool {
@@ -202,58 +116,11 @@ pub struct Source {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
 }
 
 impl Source {
     pub fn to_json_value(&self) -> serde_json::Value {
-        let mut map = serde_json::Map::new();
-        map.insert(
-            "type".to_string(),
-            serde_json::Value::String(self.type_.clone()),
-        );
-        if let Some(ref path) = self.path {
-            map.insert("path".to_string(), serde_json::Value::String(path.clone()));
-        }
-        if let Some(ref content) = self.content {
-            map.insert(
-                "content".to_string(),
-                serde_json::Value::String(content.clone()),
-            );
-        }
-        if let Some(ref session_id) = self.session_id {
-            map.insert(
-                "session_id".to_string(),
-                serde_json::Value::String(session_id.clone()),
-            );
-        }
-        serde_json::Value::Object(map)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Worktree {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub branch: Option<String>,
-}
-
-impl Worktree {
-    pub fn to_json_value(&self) -> serde_json::Value {
-        let mut map = serde_json::Map::new();
-        if let Some(ref path) = self.path {
-            map.insert("path".to_string(), serde_json::Value::String(path.clone()));
-        }
-        if let Some(ref branch) = self.branch {
-            map.insert(
-                "branch".to_string(),
-                serde_json::Value::String(branch.clone()),
-            );
-        }
-        serde_json::Value::Object(map)
+        serde_json::to_value(self).expect("source serialization should succeed")
     }
 }
 
@@ -269,7 +136,6 @@ pub struct NewItem {
     pub description: Option<String>,
     pub priority: Option<u8>,
     pub metadata: serde_json::Value,
-    pub session_id: Option<String>,
     pub blocked_by: Vec<String>,
 }
 
@@ -285,19 +151,10 @@ impl Queue {
         title: Option<String>,
         priority: Option<u8>,
         metadata: serde_json::Value,
-        session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
         self.validate_sources(&sources)?;
-        self.push_with_description(
-            sources,
-            title,
-            None,
-            priority,
-            metadata,
-            session_id,
-            blocked_by,
-        )
+        self.push_with_description(sources, title, None, priority, metadata, blocked_by)
     }
 
     /// Add a new item to the queue with description support.
@@ -308,7 +165,6 @@ impl Queue {
         description: Option<String>,
         priority: Option<u8>,
         metadata: serde_json::Value,
-        session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
         let new_item = NewItem {
@@ -317,7 +173,6 @@ impl Queue {
             description,
             priority,
             metadata,
-            session_id,
             blocked_by,
         };
 
@@ -354,12 +209,10 @@ impl Queue {
                     priority: new_item.priority,
                     sources: new_item.sources,
                     metadata: new_item.metadata,
-                    session_id: new_item.session_id,
-                    worktree: None,
-                    blocked_by: new_item.blocked_by,
-                    errors: Vec::new(),
                     created_at: now.clone(),
                     updated_at: now.clone(),
+                    blocked_by: new_item.blocked_by,
+                    errors: Vec::new(),
                 };
 
                 writeln!(f, "{}", item.to_json_string())?;
@@ -446,9 +299,6 @@ impl Queue {
             }
             if let Some(metadata) = attrs.metadata {
                 item.metadata = metadata;
-            }
-            if let Some(session_id) = attrs.session_id {
-                item.session_id = Some(session_id);
             }
             if let Some(blocked_by) = attrs.blocked_by {
                 item.blocked_by = blocked_by;
@@ -649,7 +499,6 @@ pub struct UpdateAttrs {
     pub description: Option<String>,
     pub priority: Option<Option<u8>>,
     pub metadata: Option<serde_json::Value>,
-    pub session_id: Option<String>,
     pub blocked_by: Option<Vec<String>>,
     pub sources: Option<Vec<Source>>,
 }
