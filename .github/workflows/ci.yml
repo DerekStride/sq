@@ -6,34 +6,9 @@ on:
   pull_request:
 
 jobs:
-  ruby:
-    name: Ruby (tests)
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        ruby-version: ["3.2", "3.3"]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.ruby-version }}
-          bundler-cache: true
-
-      - name: Run tests
-        run: bundle exec rake test
-
   rust:
-    name: Rust (sq)
+    name: Rust
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: sq
 
     steps:
       - name: Checkout
@@ -48,8 +23,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            sq/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('sq/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 

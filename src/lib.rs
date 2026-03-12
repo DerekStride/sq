@@ -46,7 +46,7 @@ pub enum Commands {
     Close(StatusArgs),
     /// Remove an item from the queue
     Rm(RmArgs),
-    /// Output sift workflow context for AI agents
+    /// Output queue workflow context for AI agents
     Prime(PrimeArgs),
 }
 

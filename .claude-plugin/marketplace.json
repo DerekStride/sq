@@ -8,11 +8,11 @@
     {
       "name": "sq",
       "source": "./",
-      "description": "Queue-driven task and review management with the sq CLI.",
+      "description": "Queue CLI and queue-native task/review substrate.",
       "version": "0.1.0",
-      "repository": "https://github.com/shopify-playground/sift",
+      "repository": "https://github.com/DerekStride/sq",
       "license": "MIT",
-      "keywords": ["queue", "task-tracking", "sift", "sq"],
+      "keywords": ["queue", "task-tracking", "review", "sq"],
       "skills": ["./skills/"]
     }
   ]

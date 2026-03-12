@@ -1243,7 +1243,7 @@ fn test_prime_output() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "# Sift — Queue-Driven Review System",
+            "# sq — Queue CLI and Queue-Native Task/Review Substrate",
         ))
         .stdout(predicate::str::contains("## `sq` Commands"))
         .stdout(predicate::str::contains("### `sq add`"))
@@ -1271,6 +1271,21 @@ fn test_version_flag() {
 fn test_env_queue_path() {
     let dir = TempDir::new().unwrap();
     let qp = dir.path().join("env_queue.jsonl");
+
+    let output = sq_cmd()
+        .env("SQ_QUEUE_PATH", qp.to_str().unwrap())
+        .args(["add", "--text", "env test"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(qp.exists());
+}
+
+#[test]
+fn test_legacy_sift_env_queue_path() {
+    let dir = TempDir::new().unwrap();
+    let qp = dir.path().join("legacy_env_queue.jsonl");
 
     let output = sq_cmd()
         .env("SIFT_QUEUE_PATH", qp.to_str().unwrap())

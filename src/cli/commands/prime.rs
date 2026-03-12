@@ -11,16 +11,23 @@ pub fn generate() -> String {
     let mut parts = Vec::new();
 
     parts.push(
-        r#"# Sift — Queue-Driven Review System
+        r#"# sq — Queue CLI and Queue-Native Task/Review Substrate
 
-Sift is a queue-driven review system where **humans make decisions** and **agents do the work**.
+`sq` manages work in a JSONL queue.
+
+Use it to:
+
+- add and organize review/task items
+- collect work from search results
+- inspect queue state
+- drive human or agent workflows from the queue
 
 ## Core Workflow
 
-1. Items enter the queue via `sq add` (with sources: text, diff, file, directory)
-2. A human launches `sift` to review pending items in the TUI
-3. For each item, the human can view the sources and spawn agents to act on them
-4. When an agent finishes, its transcript is appended as a source on the item
+1. Create items with `sq add` or `sq collect --by-file`
+2. Inspect queue state with `sq list` and `sq show`
+3. Update progress with `sq edit`, `sq close`, or `sq rm`
+4. Use the queue directly, or hand it off to another consumer such as `sift`
 
 ## `sq` Commands"#
             .to_string(),

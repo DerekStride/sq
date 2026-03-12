@@ -1,38 +1,8 @@
-# Sift
+# sq
 
-Queue-driven review system where humans make decisions and agents do the work.
+`sq` is a queue CLI and queue-native task/review substrate.
 
-## The Inversion
-
-Traditional agent CLIs: agent drives, human occasionally intervenes.
-
-**Sift inverts this**: human drives decisions, agents provide signal and execute.
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Human     │────▶│   Queue      │◀────│   Agents    │
-│   (TUI)     │     │   (JSONL)    │     │   (bg)      │
-└─────────────┘     └──────────────┘     └─────────────┘
-```
-
-The queue is the coordination mechanism. Humans review items, spawn agents for analysis, and close items when done. Agents run in the background and their results flow back as new sources on queue items — or as entirely new items.
-
-## Quick Start
-
-```bash
-bundle install
-
-# Add items to the queue
-sq add --text "Review this change"
-sq add --diff changes.patch --file main.rb
-sq add --stdin text < notes.txt
-
-# Launch the interactive review TUI
-sift
-
-# Or in dry mode (no API calls)
-sift --dry
-```
+It manages review and task items in a JSONL queue file. You can use it directly from the shell, from agents, or as the queue layer for tools like `sift`.
 
 ## Install `sq` skills in Pi / Claude
 
@@ -41,103 +11,242 @@ You can install this repo as a plugin source to get the `sq` skills.
 ### Pi
 
 ```bash
-pi install https://github.com/DerekStride/sift
+pi install https://github.com/DerekStride/sq
 ```
 
 ### Claude
 
 ```bash
-claude plugin marketplace add https://github.com/DerekStride/sift
+claude plugin marketplace add https://github.com/DerekStride/sq
 claude plugin install sq
 ```
 
 ### Cargo
 
-If you only want the `sq` CLI, install it from crates.io:
-
 ```bash
 cargo install sift-queue
 ```
 
-## TUI Actions
+## Build / Run
 
-The core workflow in the review TUI:
-
-- **View** (`v`) — open item sources in `$EDITOR` to read the full context
-- **Agent** (`a`) — spawn a background agent for this item. In the prompt, use `Shift-Tab` to cycle model (Haiku/Sonnet/Opus) and `Ctrl-T` to toggle worktree creation before sending.
-- **General** (`g`) — spawn a free-form agent not tied to any item. In the prompt, use `Shift-Tab` to cycle model before sending.
-- **Close** (`c`) — mark the item as closed and move to the next one
-
-When you press `a` or `g`, type your instruction inline or press `Ctrl+G` to compose in `$EDITOR`.
-
-Run `sift --help` for all available options.
-
-## How Agents Work
-
-Agents run in the background. While an agent works on one item, you can continue reviewing others.
-
-When an agent finishes, its conversation transcript is appended as a new source on the item. The agent's session ID is stored on the item, so subsequent agent invocations continue the same conversation — enabling multi-turn refinement.
-
-**General agents** are useful for multiple use-cases including:
-
-1. **Actioning insights during review** — when you notice something while reviewing, spawn a general agent to investigate. General agents are given the context to use `sq` themselves, so they can add new items to the queue for you to review.
-2. **Exploring and explaining** — ask a general agent to research or explain something. When it finishes, the result shows up as a new queue item, and you can continue reviewing it like any other item.
-
-## `sq` — Queue Management CLI
-
-Manage the JSONL review queue from the command line.
+From repository root:
 
 ```bash
-sq add --text "Review this"                    # Add item with text
-sq add --diff changes.patch --file main.rb     # Add with diff + file source
-sq add --stdin text < file.txt                 # Add from stdin
-sq add --system-prompt prompts/review.md       # Add with per-item system prompt
-sq add --metadata '{"priority":"high"}'        # Add with metadata
-sq add --text "Depends on x" --blocked-by a1b  # Add with dependency
-
-rg --json 'OldThing' | sq collect --by-file    # One queue item per file from search results
-
-sq list                                        # List all items
-sq list --status pending                       # Filter by status
-sq list --ready                                # Pending + unblocked
-sq list --filter 'select(.metadata.p == 0)'    # jq filter expression
-sq list --sort .metadata.priority              # Sort by jq path
-sq list --sort .created_at --reverse           # Sort descending
-sq list --json                                 # JSON output
-
-sq show <id>                                   # Show item details
-
-sq edit <id> --set-status closed               # Modify item fields
-sq edit <id> --set-blocked-by a1b,c3d          # Set dependencies
-
-sq rm <id>                                     # Remove item
+cargo run -- --help
 ```
 
-Run `sq --help` or `sq <command> --help` for full flag details.
+## Queue path
 
-## Task Fields: Primitives vs Metadata
+By default, `sq` uses:
 
-Sift keeps the queue schema intentionally small. A limited set of fields are first-class item primitives (for core workflow and UX), and integration-specific task data is expected to live in `metadata`.
+- `.sift/queue.jsonl`
 
-High-level guidance for integrators:
+You can override it with:
 
-- Keep domain/task attributes (for example, priority, type, due date, plugin state) in `metadata`.
-- Use a stable namespace for integration-owned keys (for example, `metadata.pi_tasks`).
-- Prefer patch-style updates via `sq edit --merge-metadata` to avoid replacing unrelated metadata.
-- Treat promoted primitives (like `title`, and any future explicitly promoted fields) as opt-in conveniences, not a replacement for integration metadata.
+- `-q, --queue <PATH>`
+- `SQ_QUEUE_PATH=<PATH>`
+- `SIFT_QUEUE_PATH=<PATH>` (legacy compatibility)
 
-Example update pattern:
+## Commands
+
+- `sq add` — create a single item
+- `sq collect` — create many items from piped stdin
+- `sq list` — list items
+- `sq show <id>` — show item details
+- `sq edit <id>` — edit item fields/sources
+- `sq close <id>` — mark item as closed
+- `sq rm <id>` — remove item
+- `sq prime` — output queue workflow context for AI agents
+
+Use `sq <command> --help` for full options.
+
+## Common examples
 
 ```bash
-sq edit <id> --merge-metadata '{"pi_tasks":{"priority":"high"}}'
+# Add item with source text
+sq add --text "Review this"
+
+# Add source-less task item
+sq add --title "Refactor parser" --description "Split command logic"
+
+# Add item with metadata
+sq add --metadata '{"pi_tasks":{"priority":"high"}}'
+
+# Collect one item per file from ripgrep JSON
+rg --json PATTERN | sq collect --by-file
+
+# Include line numbers and surrounding context in each collected text source
+rg --json -n -C2 PATTERN | sq collect --by-file
+
+# Add shared description to every created item
+rg --json -n -C2 PATTERN | sq collect --by-file \
+  --description "Migrate PATTERN to Y"
+
+# Template titles using filepath / filename / match_count
+rg --json PATTERN | sq collect --by-file \
+  --title-template 'migrate: {{filepath}}'
+
+# Attach shared metadata while collecting
+rg --json PATTERN | sq collect --by-file \
+  --metadata '{"campaign":"pattern-removal","priority":"p2"}'
+
+# List open items (default excludes closed)
+sq list
+
+# Include closed too
+sq list --all
+
+# Machine-readable output
+sq add --text "X" --json
+sq edit abc --set-status closed --json
+sq rm abc --json
+rg --json PATTERN | sq collect --by-file --json
+
+# Merge metadata patch
+sq edit abc --merge-metadata '{"pi_tasks":{"priority":"low"}}'
+
+# Close item quickly
+sq close abc
 ```
 
-This approach preserves flexibility for integrations while keeping the core queue model predictable.
+## `sq collect --by-file`
+
+`sq collect --by-file` is the bulk-ingestion workflow for turning search results into queue items.
+
+A common pattern is:
+
+1. search the codebase with `rg --json`
+2. group results by file
+3. create one queue item per file
+4. review or process that queue with your preferred workflow
+
+Example:
+
+```bash
+rg --json -n -C2 'OldApi.call' | sq collect --by-file \
+  --description "Migrate OldApi.call to NewApi.call"
+```
+
+### Supported input
+
+Currently supported:
+
+- `rg --json`
+
+Plain-text `rg` output is not supported.
+
+If you want surrounding context in each created `text` source, pass ripgrep context flags such as:
+
+- `-n` for line numbers
+- `-C2` for two lines of context
+- `-A2` / `-B2` for after / before context
+
+### What each collected item contains
+
+For each file group, `sq collect --by-file` creates:
+
+1. a `file` source for the filepath
+2. a `text` source containing the grouped ripgrep match/context lines
+
+This makes the queue item easy to inspect later:
+
+- the `file` source points at the file
+- the `text` source preserves the specific matches that caused the item to be created
+
+### Shared flags
+
+These flags apply to every created item:
+
+- `--title`
+- `--description`
+- `--title-template`
+- `--metadata`
+- `--blocked-by`
+- `--json`
+
+### Title behavior
+
+If you do not provide `--title` or `--title-template`, the default title template is:
+
+```text
+{{match_count}}:{{filepath}}
+```
+
+That keeps bulk-created queues scannable in `sq list`.
+
+Examples:
+
+```bash
+# Static title for every item
+rg --json PATTERN | sq collect --by-file --title "Pattern cleanup"
+
+# Templated titles per file
+rg --json PATTERN | sq collect --by-file \
+  --title-template 'cleanup: {{filename}} ({{match_count}} matches)'
+```
+
+### Title template variables
+
+Available in `--title-template`:
+
+- `{{filepath}}` — full grouped file path
+- `{{filename}}` — basename of `{{filepath}}`
+- `{{match_count}}` — number of ripgrep `match` events collected for that file
+
+### Suggested migration / cleanup workflow
+
+When you want to build a queue from repeated occurrences across a codebase:
+
+```bash
+rg --json -n -C2 'OldThing' | sq collect --by-file \
+  --description 'Replace OldThing with NewThing' \
+  --metadata '{"kind":"migration"}'
+
+sq list
+sq show <id>
+```
+
+This is especially useful for:
+
+- migrations
+- API renames
+- deprecations
+- TODO / FIXME sweeps
+- repeated code smell cleanup
+
+## Optional integration with `sift`
+
+`sq` is useful on its own, but it also works well as the queue layer for `sift`.
+
+A common pairing is:
+
+```bash
+sq add --text "Investigate flaky spec"
+sift
+```
+
+## Status values
+
+Current statuses:
+
+- `pending`
+- `in_progress`
+- `closed`
+
+Set explicit status via:
+
+```bash
+sq edit <id> --set-status <pending|in_progress|closed>
+```
+
+Or use convenience close command:
+
+```bash
+sq close <id>
+```
 
 ## Development
 
 ```bash
-bundle exec rake test
+cargo test
 ```
-
-Set `SIFT_LOG_LEVEL=DEBUG` for verbose logging.

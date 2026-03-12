@@ -13,10 +13,6 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: sq
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,10 +36,6 @@ jobs:
     if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: sq
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,8 +49,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            sq/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('sq/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 

@@ -66,7 +66,7 @@ Why this is useful:
 - each file becomes its own task
 - the task keeps a `file` source for the path
 - the task keeps a `text` source with the exact matching snippets
-- the resulting queue is easy to inspect with `sq list`, `sq show`, or `sift`
+- the resulting queue is easy to inspect with `sq list`, `sq show`, or another queue consumer such as `sift`
 
 Recommended options:
 

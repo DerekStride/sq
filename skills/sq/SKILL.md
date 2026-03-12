@@ -2,7 +2,7 @@
 name: sq
 description: Queue management CLI for task tracking and review workflows. Use when managing queue items, collecting work from search results, listing queue state, or integrating with sift review loops.
 license: MIT
-compatibility: Requires sq CLI. Install from https://github.com/shopify-playground/sift
+compatibility: Requires sq CLI. Install from https://github.com/DerekStride/sq
 allowed-tools: Bash(sq:*)
 ---
 
@@ -15,14 +15,15 @@ Use this skill when you need to:
 - add or edit queue items directly
 - inspect queue state
 - build a queue from search results with `sq collect --by-file`
-- prepare work for the `sift` review loop
+- prepare work for a queue consumer such as `sift`
 
 ## Queue Path
 
-By default, `sq` resolves the queue path from Sift defaults. Override with:
+By default, `sq` resolves the queue path to `.sift/queue.jsonl`. Override with:
 
 - `-q, --queue <PATH>` flag
-- `SIFT_QUEUE_PATH` environment variable
+- `SQ_QUEUE_PATH` environment variable
+- `SIFT_QUEUE_PATH` environment variable (legacy compatibility)
 
 When operating on a project-specific queue, prefer an explicit queue path.
 
