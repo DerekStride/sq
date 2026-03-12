@@ -14,6 +14,9 @@ pub const VALID_STATUSES: &[&str] = &["pending", "in_progress", "closed"];
 /// Valid source types accepted by `push` (used for validation on add).
 pub const VALID_SOURCE_TYPES: &[&str] = &["diff", "file", "text", "directory"];
 
+/// Valid priority range accepted by first-class priority fields.
+pub const VALID_PRIORITY_RANGE: std::ops::RangeInclusive<u8> = 0..=4;
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -27,6 +30,10 @@ pub struct Item {
     pub description: Option<String>,
 
     pub status: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub priority: Option<u8>,
 
     pub sources: Vec<Source>,
 
@@ -58,14 +65,8 @@ fn is_empty_json_vec(v: &[serde_json::Value]) -> bool {
     v.is_empty()
 }
 
-/// We need the JSON field order to match Ruby exactly.
-/// Ruby `to_h` outputs: id, (title if present), (description if present),
-/// status, sources, metadata, session_id, created_at, updated_at,
-/// (worktree if present), (blocked_by if non-empty), (errors if non-empty).
-///
-/// serde by default serializes in struct field order, so we order the fields
-/// to match. But Ruby puts title BEFORE status when present, and worktree/
-/// blocked_by/errors AFTER updated_at. Let's use a custom serializer.
+/// Serialize items explicitly so JSON output stays stable and `session_id`
+/// is always present even when null, while optional fields remain omitted.
 impl Item {
     pub fn to_json_value(&self) -> serde_json::Value {
         let mut map = serde_json::Map::new();
@@ -90,6 +91,13 @@ impl Item {
             "status".to_string(),
             serde_json::Value::String(self.status.clone()),
         );
+
+        if let Some(priority) = self.priority {
+            map.insert(
+                "priority".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(priority)),
+            );
+        }
 
         map.insert(
             "sources".to_string(),
@@ -170,6 +178,20 @@ impl Item {
     }
 }
 
+pub fn parse_priority_value(input: &str) -> Result<u8> {
+    let trimmed = input.trim();
+
+    let priority = trimmed
+        .parse::<u8>()
+        .with_context(|| format!("Invalid priority: {input}. Valid: 0-4"))?;
+
+    if !VALID_PRIORITY_RANGE.contains(&priority) {
+        anyhow::bail!("Invalid priority: {input}. Valid: 0-4");
+    }
+
+    Ok(priority)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Source {
     #[serde(rename = "type")]
@@ -245,6 +267,7 @@ pub struct NewItem {
     pub sources: Vec<Source>,
     pub title: Option<String>,
     pub description: Option<String>,
+    pub priority: Option<u8>,
     pub metadata: serde_json::Value,
     pub session_id: Option<String>,
     pub blocked_by: Vec<String>,
@@ -260,12 +283,21 @@ impl Queue {
         &self,
         sources: Vec<Source>,
         title: Option<String>,
+        priority: Option<u8>,
         metadata: serde_json::Value,
         session_id: Option<String>,
         blocked_by: Vec<String>,
     ) -> Result<Item> {
         self.validate_sources(&sources)?;
-        self.push_with_description(sources, title, None, metadata, session_id, blocked_by)
+        self.push_with_description(
+            sources,
+            title,
+            None,
+            priority,
+            metadata,
+            session_id,
+            blocked_by,
+        )
     }
 
     /// Add a new item to the queue with description support.
@@ -274,6 +306,7 @@ impl Queue {
         sources: Vec<Source>,
         title: Option<String>,
         description: Option<String>,
+        priority: Option<u8>,
         metadata: serde_json::Value,
         session_id: Option<String>,
         blocked_by: Vec<String>,
@@ -282,6 +315,7 @@ impl Queue {
             sources,
             title,
             description,
+            priority,
             metadata,
             session_id,
             blocked_by,
@@ -317,6 +351,7 @@ impl Queue {
                     title: new_item.title,
                     description: new_item.description,
                     status: "pending".to_string(),
+                    priority: new_item.priority,
                     sources: new_item.sources,
                     metadata: new_item.metadata,
                     session_id: new_item.session_id,
@@ -403,6 +438,12 @@ impl Queue {
             if let Some(description) = attrs.description {
                 item.description = Some(description);
             }
+            if let Some(priority) = attrs.priority {
+                if let Some(value) = priority {
+                    validate_priority(value)?;
+                }
+                item.priority = priority;
+            }
             if let Some(metadata) = attrs.metadata {
                 item.metadata = metadata;
             }
@@ -455,12 +496,18 @@ impl Queue {
             _ => true,
         };
 
+        if let Some(priority) = item.priority {
+            validate_priority(priority)?;
+        }
+
         if item.sources.is_empty()
             && item.title.is_none()
             && item.description.is_none()
             && !has_metadata
         {
-            anyhow::bail!("Item requires at least one source, title, description, or metadata");
+            anyhow::bail!(
+                "Item requires at least one source, title, description, or metadata"
+            );
         }
 
         self.validate_source_types(&item.sources)
@@ -586,12 +633,21 @@ fn now_iso8601() -> String {
         .to_string()
 }
 
+fn validate_priority(priority: u8) -> Result<()> {
+    if VALID_PRIORITY_RANGE.contains(&priority) {
+        Ok(())
+    } else {
+        anyhow::bail!("Invalid priority: {}. Valid: 0-4", priority);
+    }
+}
+
 /// Attributes for updating an item.
 #[derive(Default)]
 pub struct UpdateAttrs {
     pub status: Option<String>,
     pub title: Option<String>,
     pub description: Option<String>,
+    pub priority: Option<Option<u8>>,
     pub metadata: Option<serde_json::Value>,
     pub session_id: Option<String>,
     pub blocked_by: Option<Vec<String>>,

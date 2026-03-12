@@ -1,4 +1,4 @@
-use crate::queue::{Queue, Source};
+use crate::queue::{parse_priority_value, Queue, Source};
 use crate::AddArgs;
 use anyhow::Result;
 use std::io::Read;
@@ -57,6 +57,17 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
         });
     }
 
+    let priority = match &args.priority {
+        Some(value) => match parse_priority_value(value) {
+            Ok(priority) => Some(priority),
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                return Ok(1);
+            }
+        },
+        None => None,
+    };
+
     let has_source = !sources.is_empty();
     let has_description = args.description.is_some();
     let has_title = args.title.is_some();
@@ -94,6 +105,7 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
         sources,
         args.title.clone(),
         args.description.clone(),
+        priority,
         metadata,
         None,
         blocked_by,

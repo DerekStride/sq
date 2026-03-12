@@ -1,5 +1,5 @@
 use crate::collect::{detect_format, render_title, Format};
-use crate::queue::{NewItem, Queue, Source};
+use crate::queue::{parse_priority_value, NewItem, Queue, Source};
 use crate::CollectArgs;
 use anyhow::Result;
 use std::io::{IsTerminal, Read};
@@ -59,6 +59,17 @@ pub fn execute(args: &CollectArgs, queue_path: PathBuf) -> Result<i32> {
         },
     };
 
+    let priority = match &args.priority {
+        Some(value) => match parse_priority_value(value) {
+            Ok(priority) => Some(priority),
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                return Ok(1);
+            }
+        },
+        None => None,
+    };
+
     let metadata = match &args.metadata {
         Some(json_str) => match serde_json::from_str(json_str) {
             Ok(v) => v,
@@ -110,6 +121,7 @@ pub fn execute(args: &CollectArgs, queue_path: PathBuf) -> Result<i32> {
             ],
             title: Some(title),
             description: args.description.clone(),
+            priority,
             metadata: metadata.clone(),
             session_id: None,
             blocked_by: blocked_by.clone(),

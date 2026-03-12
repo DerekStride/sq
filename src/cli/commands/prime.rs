@@ -22,14 +22,20 @@ By default, `sq` stores tasks in `.sift/issues.jsonl`. Override with `-q, --queu
 ```bash
 sq add --title "Investigate checkout exception" \
   --description "Review the pasted error report and identify the failing code path" \
+  --priority 1 \
   --text "Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42"
 
 rg --json -n -C2 'OldApi.call' | sq collect --by-file \
   --title-template "migrate: {{filepath}}" \
-  --description "Migrate OldApi.call to NewApi.call"
+  --description "Migrate OldApi.call to NewApi.call" \
+  --priority 2
 
 sq list --ready
 ```
+
+## Priority
+
+Priority uses the inclusive range `0..4`, where `0` is highest.
 
 ## `sq` Commands"#
             .to_string(),

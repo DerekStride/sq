@@ -41,7 +41,7 @@ pub fn build_cli() -> Command {
     let header = styles.get_header();
     let literal = styles.get_literal();
     let root_help = StyledStr::from(format!(
-        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}\n\n{header}Examples:{header:#}\n  {literal}sq add --title \"Investigate checkout exception\" --description \"Review the pasted error report and identify the failing code path\" --text \"Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42\"{literal:#}\n  {literal}rg --json -n -C2 'OldApi.call' | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\"{literal:#}\n  {literal}sq list --ready{literal:#}"
+        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}\n\n{header}Examples:{header:#}\n  {literal}sq add --title \"Investigate checkout exception\" --description \"Review the pasted error report and identify the failing code path\" --priority 1 --text \"Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42\"{literal:#}\n  {literal}rg --json -n -C2 'OldApi.call' | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\" --priority 2{literal:#}\n  {literal}sq list --ready{literal:#}"
     ));
     cmd = cmd.after_help(root_help);
 
@@ -87,6 +87,10 @@ pub struct AddArgs {
     #[arg(long = "description", value_name = "TEXT", display_order = 2)]
     pub description: Option<String>,
 
+    /// Priority (0-4, 0=highest)
+    #[arg(long = "priority", value_name = "PRIORITY", display_order = 3)]
+    pub priority: Option<String>,
+
     /// Add diff source (repeatable)
     #[arg(long = "diff", value_name = "PATH", display_order = 10)]
     pub diff: Vec<String>,
@@ -130,6 +134,10 @@ pub struct CollectArgs {
     /// Description for every created item
     #[arg(long = "description", value_name = "TEXT", display_order = 2)]
     pub description: Option<String>,
+
+    /// Priority (0-4, 0=highest)
+    #[arg(long = "priority", value_name = "PRIORITY", display_order = 3)]
+    pub priority: Option<String>,
 
     /// Split stdin into one item per file
     #[arg(long = "by-file", display_order = 10)]
@@ -213,6 +221,14 @@ pub struct EditArgs {
     /// Change status (pending|in_progress|closed)
     #[arg(long = "set-status", value_name = "STATUS", display_order = 3)]
     pub set_status: Option<String>,
+
+    /// Set priority (0-4, 0=highest)
+    #[arg(long = "set-priority", value_name = "PRIORITY", display_order = 4)]
+    pub set_priority: Option<String>,
+
+    /// Clear priority
+    #[arg(long = "clear-priority", display_order = 5)]
+    pub clear_priority: bool,
 
     /// Add diff source
     #[arg(long = "add-diff", value_name = "PATH", display_order = 10)]

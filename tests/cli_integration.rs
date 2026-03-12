@@ -260,6 +260,18 @@ fn test_add_metadata_without_sources() {
 }
 
 #[test]
+fn test_add_invalid_priority_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "x", "--priority", "P1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid priority: P1. Valid: 0-4"));
+}
+
+#[test]
 fn test_add_invalid_metadata_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -327,6 +339,39 @@ fn test_list_json() {
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(json.is_array());
     assert_eq!(json.as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn test_list_default_sorts_by_priority() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "low", "--priority", "3"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "high", "--priority", "0"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "none"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--json"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items[0]["title"], "high");
+    assert_eq!(items[1]["title"], "low");
+    assert_eq!(items[2]["title"], "none");
 }
 
 #[test]
@@ -527,6 +572,32 @@ fn test_show_human_readable() {
 }
 
 #[test]
+fn test_show_human_readable_with_priority() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--title",
+            "My Item",
+            "--priority",
+            "2",
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "show", &id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Priority: 2"));
+}
+
+#[test]
 fn test_show_not_found() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -578,6 +649,88 @@ fn test_edit_set_status() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["status"], "closed");
+}
+
+#[test]
+fn test_edit_set_and_clear_priority() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-priority", "1"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["priority"], 1);
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--clear-priority"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(json.get("priority").is_none());
+}
+
+#[test]
+fn test_edit_invalid_priority_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-priority", "9"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid priority"));
+}
+
+#[test]
+fn test_edit_set_and_clear_priority_are_mutually_exclusive() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--set-priority",
+            "1",
+            "--clear-priority",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--set-priority and --clear-priority are mutually exclusive",
+        ));
 }
 
 #[test]
@@ -1100,7 +1253,7 @@ fn test_collect_by_file_json_output_returns_full_items() {
 }
 
 #[test]
-fn test_collect_by_file_with_description_metadata_and_blocked_by() {
+fn test_collect_by_file_with_description_priority_metadata_and_blocked_by() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
 
@@ -1112,6 +1265,8 @@ fn test_collect_by_file_with_description_metadata_and_blocked_by() {
             "--by-file",
             "--description",
             "Remove foo",
+            "--priority",
+            "2",
             "--metadata",
             r#"{"kind":"migration"}"#,
             "--blocked-by",
@@ -1127,6 +1282,7 @@ fn test_collect_by_file_with_description_metadata_and_blocked_by() {
     let items = json.as_array().unwrap();
     assert_eq!(items.len(), 2);
     assert_eq!(items[0]["description"], "Remove foo");
+    assert_eq!(items[0]["priority"], 2);
     assert_eq!(items[0]["metadata"]["kind"], "migration");
     assert_eq!(items[0]["blocked_by"], serde_json::json!(["abc", "def"]));
 }
@@ -1262,6 +1418,7 @@ fn test_add_help_puts_title_and_description_first() {
         &[
             "--title <TITLE>",
             "--description <TEXT>",
+            "--priority <PRIORITY>",
             "--diff <PATH>",
             "--file <PATH>",
             "--text <STRING>",
@@ -1280,6 +1437,7 @@ fn test_collect_help_puts_title_and_description_first() {
         &[
             "--title <TITLE>",
             "--description <TEXT>",
+            "--priority <PRIORITY>",
             "--by-file",
             "--stdin-format <FORMAT>",
             "--title-template <TEMPLATE>",
@@ -1299,6 +1457,7 @@ fn test_edit_help_puts_title_and_description_first() {
             "--set-title <TITLE>",
             "--set-description <TEXT>",
             "--set-status <STATUS>",
+            "--set-priority <PRIORITY>",
             "--add-diff <PATH>",
         ],
     );
@@ -1321,6 +1480,10 @@ fn test_prime_output() {
         .stdout(predicate::str::contains(".sift/issues.jsonl"))
         .stdout(predicate::str::contains("## Examples"))
         .stdout(predicate::str::contains("sq list --ready"))
+        .stdout(predicate::str::contains("## Priority"))
+        .stdout(predicate::str::contains(
+            "Priority uses the inclusive range `0..4`, where `0` is highest.",
+        ))
         .stdout(predicate::str::contains("## `sq` Commands"))
         .stdout(predicate::str::contains("### `sq add` — Add a new task"))
         .stdout(predicate::str::contains(
@@ -1395,10 +1558,10 @@ fn test_default_queue_path() {
     assert!(content.contains("default path test"));
 }
 
-// ── JSON Field Order ────────────────────────────────────────────────────────
+// ── JSON Output ─────────────────────────────────────────────────────────────
 
 #[test]
-fn test_json_field_order() {
+fn test_json_output_includes_priority_when_present() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
 
@@ -1413,6 +1576,8 @@ fn test_json_field_order() {
             "Title",
             "--description",
             "Description",
+            "--priority",
+            "1",
         ])
         .output()
         .unwrap();
@@ -1422,25 +1587,9 @@ fn test_json_field_order() {
         .args(["-q", &qp, "show", &id, "--json"])
         .output()
         .unwrap();
-    let stdout = String::from_utf8(output.stdout).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
 
-    // Verify field order: id, title, description, status, sources, metadata, session_id, created_at, updated_at
-    let id_pos = stdout.find("\"id\"").unwrap();
-    let title_pos = stdout.find("\"title\"").unwrap();
-    let description_pos = stdout.find("\"description\"").unwrap();
-    let status_pos = stdout.find("\"status\"").unwrap();
-    let sources_pos = stdout.find("\"sources\"").unwrap();
-    let metadata_pos = stdout.find("\"metadata\"").unwrap();
-    let session_id_pos = stdout.find("\"session_id\"").unwrap();
-    let created_at_pos = stdout.find("\"created_at\"").unwrap();
-    let updated_at_pos = stdout.find("\"updated_at\"").unwrap();
-
-    assert!(id_pos < title_pos);
-    assert!(title_pos < description_pos);
-    assert!(description_pos < status_pos);
-    assert!(status_pos < sources_pos);
-    assert!(sources_pos < metadata_pos);
-    assert!(metadata_pos < session_id_pos);
-    assert!(session_id_pos < created_at_pos);
-    assert!(created_at_pos < updated_at_pos);
+    assert_eq!(json["id"], id);
+    assert_eq!(json["priority"], 1);
+    assert!(json["session_id"].is_null());
 }

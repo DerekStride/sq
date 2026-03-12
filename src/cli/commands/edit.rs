@@ -1,4 +1,4 @@
-use crate::queue::{Queue, Source, UpdateAttrs, VALID_STATUSES};
+use crate::queue::{parse_priority_value, Queue, Source, UpdateAttrs, VALID_STATUSES};
 use crate::EditArgs;
 use anyhow::Result;
 use std::path::PathBuf;
@@ -31,6 +31,11 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         return Ok(1);
     }
 
+    if args.set_priority.is_some() && args.clear_priority {
+        eprintln!("Error: --set-priority and --clear-priority are mutually exclusive");
+        return Ok(1);
+    }
+
     // Status
     if let Some(ref status) = args.set_status {
         if !VALID_STATUSES.contains(&status.as_str()) {
@@ -54,6 +59,25 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     // Description
     if let Some(ref description) = args.set_description {
         attrs.description = Some(description.clone());
+        has_changes = true;
+    }
+
+    // Priority
+    if let Some(ref priority_str) = args.set_priority {
+        match parse_priority_value(priority_str) {
+            Ok(priority) => {
+                attrs.priority = Some(Some(priority));
+                has_changes = true;
+            }
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                return Ok(1);
+            }
+        }
+    }
+
+    if args.clear_priority {
+        attrs.priority = Some(None);
         has_changes = true;
     }
 

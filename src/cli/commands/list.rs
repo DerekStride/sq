@@ -41,6 +41,14 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
             Some(sorted) => items = sorted,
             None => return Ok(1),
         }
+    } else {
+        items.sort_by_key(|item| {
+            (
+                item.priority.unwrap_or(5),
+                item.created_at.clone(),
+                item.id.clone(),
+            )
+        });
     }
 
     // Apply reverse

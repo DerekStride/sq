@@ -65,17 +65,18 @@ Use `sq --help` for a full list of options.
 ### Examples
 
 ```bash
-# Add task with title, description, and pasted source text
+# Add task with title, description, priority, and pasted source text
 sq add --title "Investigate checkout exception" \
   --description "Review the pasted error report and identify the failing code path" \
+  --priority 1 \
   --text "Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42"
 
 # Add source-less task
 sq add --title "Refactor parser" --description "Split command logic"
 
 # Add task with metadata
-sq add --title "Triage follow-up" --description "Capture a priority hint in metadata" \
-  --metadata '{"pi_tasks":{"priority":"high"}}'
+sq add --title "Triage follow-up" --description "Review support escalation" \
+  --metadata '{"pi_tasks":{"escalation":"support"}}'
 
 # Collect one task per file from ripgrep JSON
 rg --json -n -C2 'OldApi.call' | sq collect --by-file \
@@ -91,7 +92,7 @@ rg --json PATTERN | sq collect --by-file --title-template "review: {{filepath}}"
   --description "Review ripgrep matches" --json
 
 # Merge metadata patch
-sq edit abc --merge-metadata '{"pi_tasks":{"priority":"low"}}'
+sq edit abc --merge-metadata '{"pi_tasks":{"type":"bug"},"owner":"derek"}'
 
 # Mark task as closed
 sq close abc

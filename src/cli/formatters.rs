@@ -33,9 +33,14 @@ pub fn print_item_summary(item: &Item, pending_ids: Option<&HashSet<String>>) {
         (None, None) => String::new(),
     };
 
+    let priority = item
+        .priority
+        .map(|value| format!("  [priority:{}]", value))
+        .unwrap_or_default();
+
     println!(
-        "{}  [{}]  {}  {}  {}",
-        item.id, display_status, label, source_types, item.created_at
+        "{}  [{}]{}  {}  {}  {}",
+        item.id, display_status, priority, label, source_types, item.created_at
     );
 }
 
@@ -49,6 +54,9 @@ pub fn print_item_detail(item: &Item) {
         println!("Description: {}", description);
     }
     println!("Status: {}", item.status);
+    if let Some(priority) = item.priority {
+        println!("Priority: {}", priority);
+    }
     println!("Created: {}", item.created_at);
     println!("Updated: {}", item.updated_at);
     println!("Session: {}", item.session_id.as_deref().unwrap_or("none"));
