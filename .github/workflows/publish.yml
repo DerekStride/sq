@@ -7,10 +7,15 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
   version-check:
     name: Verify tag matches Cargo.toml version
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v'))
     runs-on: ubuntu-latest
 
     steps:
@@ -25,15 +30,155 @@ jobs:
 
       - name: Compare tag and Cargo.toml version
         run: |
-          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          TAG_VERSION="${TAG#v}"
           if [ "$TAG_VERSION" != "${{ steps.cargo_version.outputs.version }}" ]; then
             echo "Tag version ($TAG_VERSION) does not match Cargo.toml version (${{ steps.cargo_version.outputs.version }})"
             exit 1
           fi
 
+  build-macos-artifacts:
+    name: Build macOS release artifacts (${{ matrix.target }})
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: version-check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package release archive
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          ARCHIVE="sift-queue-${TAG}-${{ matrix.target }}.tar.gz"
+          STAGE_DIR="dist/${{ matrix.target }}"
+
+          mkdir -p "$STAGE_DIR"
+          cp "target/${{ matrix.target }}/release/sq" "$STAGE_DIR/"
+          cp LICENSE.md "$STAGE_DIR/"
+          cp README.md "$STAGE_DIR/"
+
+          tar -C "$STAGE_DIR" -czf "dist/$ARCHIVE" sq LICENSE.md README.md
+          shasum -a 256 "dist/$ARCHIVE" | awk '{print $1}' > "dist/$ARCHIVE.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  publish-release-assets:
+    name: Upload macOS assets to GitHub Release
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: build-macos-artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: macos-release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
+
+  update-homebrew-tap:
+    name: Update Homebrew tap formula
+    if: |
+      github.event_name == 'release' &&
+      github.event.action == 'published' &&
+      !github.event.release.prerelease &&
+      secrets.HOMEBREW_TAP_TOKEN != ''
+    needs:
+      - build-macos-artifacts
+      - publish-release-assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: macos-release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Update tap repository
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          ARM_SHA=$(cat "dist/sift-queue-${TAG}-aarch64-apple-darwin.tar.gz.sha256")
+          INTEL_SHA=$(cat "dist/sift-queue-${TAG}-x86_64-apple-darwin.tar.gz.sha256")
+
+          TAP_DIR=$(mktemp -d)
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/DerekStride/homebrew-tap.git" "$TAP_DIR"
+
+          mkdir -p "$TAP_DIR/Formula"
+          ./scripts/generate-homebrew-formula.sh "$VERSION" "$ARM_SHA" "$INTEL_SHA" > "$TAP_DIR/Formula/sift-queue.rb"
+
+          cd "$TAP_DIR"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/sift-queue.rb
+
+          if git diff --cached --quiet; then
+            echo "Homebrew formula already up to date"
+            exit 0
+          fi
+
+          git commit -m "sift-queue $VERSION"
+          git push origin HEAD
+
   publish:
     name: Publish to crates.io
     if: github.event_name == 'release' && github.event.action == 'published'
+    needs: version-check
     runs-on: ubuntu-latest
 
     steps:
