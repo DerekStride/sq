@@ -1348,6 +1348,25 @@ fn test_env_queue_path() {
     assert!(qp.exists());
 }
 
+#[test]
+fn test_default_queue_path() {
+    let dir = TempDir::new().unwrap();
+    let qp = dir.path().join(".sift").join("issues.jsonl");
+
+    let output = sq_cmd()
+        .current_dir(dir.path())
+        .env_remove("SQ_QUEUE_PATH")
+        .args(["add", "--text", "default path test"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(qp.exists());
+
+    let content = fs::read_to_string(qp).unwrap();
+    assert!(content.contains("default path test"));
+}
+
 // ── JSON Field Order ────────────────────────────────────────────────────────
 
 #[test]

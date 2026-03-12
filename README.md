@@ -36,7 +36,7 @@ claude plugin install sq
 > [!NOTE]
 > There's no queue! See the [FAQ](#faq) section to see the origin of the name.
 
-By default, `sq` uses `.sift/queue.jsonl`. You can override it with:
+By default, `sq` uses `.sift/issues.jsonl`. You can override it with:
 
 - `-q, --queue <PATH>`
 - `SQ_QUEUE_PATH=<PATH>`
