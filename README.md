@@ -54,23 +54,30 @@ Use `sq --help` for a full list of options.
 ### Examples
 
 ```bash
-# Add item with source text
-sq add --text "Review this"
+# Add item with title, description, and pasted source text
+sq add --title "Investigate checkout exception" \
+  --description "Review the pasted error report and identify the failing code path" \
+  --text "Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42"
 
 # Add source-less task item
 sq add --title "Refactor parser" --description "Split command logic"
 
 # Add item with metadata
-sq add --metadata '{"pi_tasks":{"priority":"high"}}'
+sq add --title "Triage follow-up" --description "Capture a priority hint in metadata" \
+  --metadata '{"pi_tasks":{"priority":"high"}}'
 
 # Collect one item per file from ripgrep JSON
 rg --json -n -C2 'OldApi.call' | sq collect --by-file \
+  --title-template "migrate: {{filepath}}" \
   --description "Migrate OldApi.call to NewApi.call"
 
 # Machine-readable output
-sq add --text "X" --json
+sq add --title "Summarize support escalation" \
+  --description "Emit the created item as JSON for downstream tooling" \
+  --text "Customer reports checkout fails when applying a discount code on mobile Safari" --json
 sq edit abc --set-status closed --json
-rg --json PATTERN | sq collect --by-file --json
+rg --json PATTERN | sq collect --by-file --title-template "review: {{filepath}}" \
+  --description "Review ripgrep matches" --json
 
 # Merge metadata patch
 sq edit abc --merge-metadata '{"pi_tasks":{"priority":"low"}}'
@@ -85,6 +92,7 @@ sq close abc
 
 ```bash
 rg --json -n -C2 'OldApi.call' | sq collect --by-file \
+  --title-template "migrate: {{filepath}}" \
   --description "Migrate OldApi.call to NewApi.call"
 ```
 
