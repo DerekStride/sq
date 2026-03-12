@@ -3,7 +3,7 @@ pub mod collect;
 pub mod queue;
 pub mod queue_path;
 
-use clap::{builder::StyledStr, Args, Command, CommandFactory, Parser, Subcommand};
+use clap::{builder::StyledStr, Arg, ArgAction, Args, Command, CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -29,7 +29,14 @@ pub struct Cli {
 }
 
 pub fn build_cli() -> Command {
-    let mut cmd = Cli::command();
+    let mut cmd = Cli::command().propagate_version(true).disable_version_flag(true).arg(
+        Arg::new("version")
+            .short('v')
+            .long("version")
+            .help("Print version")
+            .action(ArgAction::Version)
+            .global(true),
+    );
     let styles = cmd.get_styles();
     let header = styles.get_header();
     let literal = styles.get_literal();

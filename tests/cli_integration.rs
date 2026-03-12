@@ -1350,6 +1350,15 @@ fn test_version_flag() {
         .stdout(predicate::str::contains("sq 0.4.2"));
 }
 
+#[test]
+fn test_version_short_flag() {
+    sq_cmd()
+        .args(["-v"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sq 0.4.2"));
+}
+
 // ── Queue Path Resolution ───────────────────────────────────────────────────
 
 #[test]
