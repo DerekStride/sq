@@ -10,7 +10,13 @@ use std::path::PathBuf;
 #[command(name = "sq", version)]
 pub struct Cli {
     /// Path to queue file
-    #[arg(short = 'q', long = "queue", value_name = "PATH", global = true)]
+    #[arg(
+        short = 'q',
+        long = "queue",
+        value_name = "PATH",
+        global = true,
+        display_order = 900
+    )]
     pub queue: Option<PathBuf>,
 
     #[command(subcommand)]
@@ -23,7 +29,7 @@ pub fn build_cli() -> Command {
         let header = styles.get_header();
         let literal = styles.get_literal();
         let help = StyledStr::from(format!(
-            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\"{literal:#}\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
+            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file --title-template \"review: {{{{filepath}}}}\" --description \"Review ripgrep matches\"{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\"{literal:#}\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
         ));
 
         subcmd.after_help(help)
@@ -52,80 +58,80 @@ pub enum Commands {
 
 #[derive(Parser)]
 pub struct AddArgs {
-    /// Add diff source (repeatable)
-    #[arg(long = "diff", value_name = "PATH")]
-    pub diff: Vec<String>,
-
-    /// Add file source (repeatable)
-    #[arg(long = "file", value_name = "PATH")]
-    pub file: Vec<String>,
-
-    /// Add text source (repeatable)
-    #[arg(long = "text", value_name = "STRING")]
-    pub text: Vec<String>,
-
-    /// Add directory source (repeatable)
-    #[arg(long = "directory", value_name = "PATH")]
-    pub directory: Vec<String>,
-
-    /// Read source content from stdin (diff|file|text|directory)
-    #[arg(long = "stdin", value_name = "TYPE")]
-    pub stdin: Option<String>,
-
     /// Title for the item
-    #[arg(long = "title", value_name = "TITLE")]
+    #[arg(long = "title", value_name = "TITLE", display_order = 1)]
     pub title: Option<String>,
 
     /// Description for the item
-    #[arg(long = "description", value_name = "TEXT")]
+    #[arg(long = "description", value_name = "TEXT", display_order = 2)]
     pub description: Option<String>,
 
+    /// Add diff source (repeatable)
+    #[arg(long = "diff", value_name = "PATH", display_order = 10)]
+    pub diff: Vec<String>,
+
+    /// Add file source (repeatable)
+    #[arg(long = "file", value_name = "PATH", display_order = 11)]
+    pub file: Vec<String>,
+
+    /// Add text source (repeatable)
+    #[arg(long = "text", value_name = "STRING", display_order = 12)]
+    pub text: Vec<String>,
+
+    /// Add directory source (repeatable)
+    #[arg(long = "directory", value_name = "PATH", display_order = 13)]
+    pub directory: Vec<String>,
+
+    /// Read source content from stdin (diff|file|text|directory)
+    #[arg(long = "stdin", value_name = "TYPE", display_order = 14)]
+    pub stdin: Option<String>,
+
     /// Attach metadata as JSON
-    #[arg(long = "metadata", value_name = "JSON")]
+    #[arg(long = "metadata", value_name = "JSON", display_order = 15)]
     pub metadata: Option<String>,
 
     /// Comma-separated blocker IDs
-    #[arg(long = "blocked-by", value_name = "IDS")]
+    #[arg(long = "blocked-by", value_name = "IDS", display_order = 16)]
     pub blocked_by: Option<String>,
 
     /// Output as JSON
-    #[arg(long = "json")]
+    #[arg(long = "json", display_order = 17)]
     pub json: bool,
 }
 
 #[derive(Args)]
 #[command(about = "Collect items from stdin into queue items")]
 pub struct CollectArgs {
-    /// Split stdin into one item per file
-    #[arg(long = "by-file")]
-    pub by_file: bool,
-
-    /// Input format: currently only rg-json is supported
-    #[arg(long = "stdin-format", value_name = "FORMAT")]
-    pub stdin_format: Option<String>,
-
     /// Title for every created item
-    #[arg(long = "title", value_name = "TITLE")]
+    #[arg(long = "title", value_name = "TITLE", display_order = 1)]
     pub title: Option<String>,
 
     /// Description for every created item
-    #[arg(long = "description", value_name = "TEXT")]
+    #[arg(long = "description", value_name = "TEXT", display_order = 2)]
     pub description: Option<String>,
 
+    /// Split stdin into one item per file
+    #[arg(long = "by-file", display_order = 10)]
+    pub by_file: bool,
+
+    /// Input format: currently only rg-json is supported
+    #[arg(long = "stdin-format", value_name = "FORMAT", display_order = 11)]
+    pub stdin_format: Option<String>,
+
     /// Template for each created item title
-    #[arg(long = "title-template", value_name = "TEMPLATE")]
+    #[arg(long = "title-template", value_name = "TEMPLATE", display_order = 12)]
     pub title_template: Option<String>,
 
     /// Attach metadata as JSON
-    #[arg(long = "metadata", value_name = "JSON")]
+    #[arg(long = "metadata", value_name = "JSON", display_order = 13)]
     pub metadata: Option<String>,
 
     /// Comma-separated blocker IDs
-    #[arg(long = "blocked-by", value_name = "IDS")]
+    #[arg(long = "blocked-by", value_name = "IDS", display_order = 14)]
     pub blocked_by: Option<String>,
 
     /// Output as JSON
-    #[arg(long = "json")]
+    #[arg(long = "json", display_order = 15)]
     pub json: bool,
 }
 
@@ -175,56 +181,56 @@ pub struct EditArgs {
     /// Item ID
     pub id: Option<String>,
 
-    /// Add diff source
-    #[arg(long = "add-diff", value_name = "PATH")]
-    pub add_diff: Vec<String>,
-
-    /// Add file source
-    #[arg(long = "add-file", value_name = "PATH")]
-    pub add_file: Vec<String>,
-
-    /// Add text source
-    #[arg(long = "add-text", value_name = "STRING")]
-    pub add_text: Vec<String>,
-
-    /// Add directory source
-    #[arg(long = "add-directory", value_name = "PATH")]
-    pub add_directory: Vec<String>,
-
-    /// Add transcript source
-    #[arg(long = "add-transcript", value_name = "PATH")]
-    pub add_transcript: Vec<String>,
-
-    /// Remove source by index (0-based, repeatable)
-    #[arg(long = "rm-source", value_name = "INDEX")]
-    pub rm_source: Vec<usize>,
-
-    /// Change status (pending|in_progress|closed)
-    #[arg(long = "set-status", value_name = "STATUS")]
-    pub set_status: Option<String>,
-
     /// Set title for the item
-    #[arg(long = "set-title", value_name = "TITLE")]
+    #[arg(long = "set-title", value_name = "TITLE", display_order = 1)]
     pub set_title: Option<String>,
 
     /// Set description for the item
-    #[arg(long = "set-description", value_name = "TEXT")]
+    #[arg(long = "set-description", value_name = "TEXT", display_order = 2)]
     pub set_description: Option<String>,
 
+    /// Change status (pending|in_progress|closed)
+    #[arg(long = "set-status", value_name = "STATUS", display_order = 3)]
+    pub set_status: Option<String>,
+
+    /// Add diff source
+    #[arg(long = "add-diff", value_name = "PATH", display_order = 10)]
+    pub add_diff: Vec<String>,
+
+    /// Add file source
+    #[arg(long = "add-file", value_name = "PATH", display_order = 11)]
+    pub add_file: Vec<String>,
+
+    /// Add text source
+    #[arg(long = "add-text", value_name = "STRING", display_order = 12)]
+    pub add_text: Vec<String>,
+
+    /// Add directory source
+    #[arg(long = "add-directory", value_name = "PATH", display_order = 13)]
+    pub add_directory: Vec<String>,
+
+    /// Add transcript source
+    #[arg(long = "add-transcript", value_name = "PATH", display_order = 14)]
+    pub add_transcript: Vec<String>,
+
+    /// Remove source by index (0-based, repeatable)
+    #[arg(long = "rm-source", value_name = "INDEX", display_order = 15)]
+    pub rm_source: Vec<usize>,
+
     /// Set metadata as JSON (replaces full metadata object)
-    #[arg(long = "set-metadata", value_name = "JSON")]
+    #[arg(long = "set-metadata", value_name = "JSON", display_order = 16)]
     pub set_metadata: Option<String>,
 
     /// Merge metadata object as JSON (deep object merge)
-    #[arg(long = "merge-metadata", value_name = "JSON")]
+    #[arg(long = "merge-metadata", value_name = "JSON", display_order = 17)]
     pub merge_metadata: Option<String>,
 
     /// Set blocker IDs (comma-separated, empty to clear)
-    #[arg(long = "set-blocked-by", value_name = "IDS")]
+    #[arg(long = "set-blocked-by", value_name = "IDS", display_order = 18)]
     pub set_blocked_by: Option<String>,
 
     /// Output as JSON
-    #[arg(long = "json")]
+    #[arg(long = "json", display_order = 19)]
     pub json: bool,
 }
 
