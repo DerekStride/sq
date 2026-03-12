@@ -1217,9 +1217,14 @@ fn test_collect_appears_in_main_help() {
         .args(["--help"])
         .assert()
         .success()
+        .stdout(predicate::str::contains(
+            "lightweight task-list CLI with structured sources",
+        ))
         .stdout(predicate::str::contains("collect"))
-        .stdout(predicate::str::contains("Manage Sift's review queue").not())
-        .stdout(predicate::str::contains("rg --json PATTERN | sq collect --by-file").not());
+        .stdout(predicate::str::contains("Path to task file"))
+        .stdout(predicate::str::contains(".sift/issues.jsonl"))
+        .stdout(predicate::str::contains("sq list --ready"))
+        .stdout(predicate::str::contains("Manage Sift's review queue").not());
 }
 
 #[test]
@@ -1236,15 +1241,14 @@ fn test_collect_examples_and_templates_appear_in_collect_help() {
         .stdout(predicate::str::contains(
             "rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{filepath}}\" --description \"Migrate OldApi.call to NewApi.call\"",
         ))
+        .stdout(predicate::str::contains("Plain-text rg output is not supported."))
         .stdout(predicate::str::contains("{{filepath}}"))
         .stdout(predicate::str::contains("{{filename}}"))
         .stdout(predicate::str::contains("{{match_count}}"))
         .stdout(predicate::str::contains(
             "Default title template: {{match_count}}:{{filepath}}",
         ))
-        .stdout(predicate::str::contains(
-            "Collect items from stdin into queue items",
-        ));
+        .stdout(predicate::str::contains("Collect tasks from stdin"));
 }
 
 #[test]
@@ -1309,15 +1313,30 @@ fn test_prime_output() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "# sq — Queue CLI and Queue-Native Task/Review Substrate",
+            "# sq — Lightweight task-list CLI with structured sources",
         ))
+        .stdout(predicate::str::contains(
+            "`sq` manages tasks in a JSONL file for agent workflows.",
+        ))
+        .stdout(predicate::str::contains(".sift/issues.jsonl"))
+        .stdout(predicate::str::contains("## Examples"))
+        .stdout(predicate::str::contains("sq list --ready"))
         .stdout(predicate::str::contains("## `sq` Commands"))
-        .stdout(predicate::str::contains("### `sq add`"))
-        .stdout(predicate::str::contains("### `sq collect`"))
-        .stdout(predicate::str::contains("### `sq list`"))
-        .stdout(predicate::str::contains("### `sq show`"))
-        .stdout(predicate::str::contains("### `sq edit`"))
-        .stdout(predicate::str::contains("### `sq rm`"));
+        .stdout(predicate::str::contains("### `sq add` — Add a new task"))
+        .stdout(predicate::str::contains(
+            "### `sq collect` — Collect tasks from stdin",
+        ))
+        .stdout(predicate::str::contains("### `sq list` — List tasks"))
+        .stdout(predicate::str::contains(
+            "### `sq show` — Show task details",
+        ))
+        .stdout(predicate::str::contains(
+            "### `sq edit` — Edit an existing task",
+        ))
+        .stdout(predicate::str::contains("### `sq rm` — Remove a task"))
+        .stdout(predicate::str::contains("Use it to:").not())
+        .stdout(predicate::str::contains("## Core Workflow").not())
+        .stdout(predicate::str::contains("JSONL queue").not());
 }
 
 // ── Version Flag ────────────────────────────────────────────────────────────

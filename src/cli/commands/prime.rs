@@ -11,23 +11,25 @@ pub fn generate() -> String {
     let mut parts = Vec::new();
 
     parts.push(
-        r#"# sq — Queue CLI and Queue-Native Task/Review Substrate
+        r#"# sq — Lightweight task-list CLI with structured sources
 
-`sq` manages work in a JSONL queue.
+`sq` manages tasks in a JSONL file for agent workflows.
 
-Use it to:
+By default, `sq` stores tasks in `.sift/issues.jsonl`. Override with `-q, --queue <PATH>` or `SQ_QUEUE_PATH=<PATH>`.
 
-- add and organize review/task items
-- collect work from search results
-- inspect queue state
-- drive human or agent workflows from the queue
+## Examples
 
-## Core Workflow
+```bash
+sq add --title "Investigate checkout exception" \
+  --description "Review the pasted error report and identify the failing code path" \
+  --text "Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42"
 
-1. Create items with `sq add` or `sq collect --by-file`
-2. Inspect queue state with `sq list` and `sq show`
-3. Update progress with `sq edit`, `sq close`, or `sq rm`
-4. Use the queue directly, or hand it off to another consumer such as `sift`
+rg --json -n -C2 'OldApi.call' | sq collect --by-file \
+  --title-template "migrate: {{filepath}}" \
+  --description "Migrate OldApi.call to NewApi.call"
+
+sq list --ready
+```
 
 ## `sq` Commands"#
             .to_string(),

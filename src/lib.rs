@@ -7,9 +7,14 @@ use clap::{builder::StyledStr, Args, Command, CommandFactory, Parser, Subcommand
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "sq", version)]
+#[command(
+    name = "sq",
+    version,
+    about = "Lightweight task-list CLI with structured sources",
+    long_about = "sq is a lightweight task-list CLI with structured sources.\n\nIt manages tasks in a JSONL file. You can use it directly from the shell or instruct agents to manage them for you."
+)]
 pub struct Cli {
-    /// Path to queue file
+    /// Path to task file
     #[arg(
         short = 'q',
         long = "queue",
@@ -24,12 +29,21 @@ pub struct Cli {
 }
 
 pub fn build_cli() -> Command {
-    Cli::command().mut_subcommand("collect", |subcmd| {
+    let mut cmd = Cli::command();
+    let styles = cmd.get_styles();
+    let header = styles.get_header();
+    let literal = styles.get_literal();
+    let root_help = StyledStr::from(format!(
+        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}\n\n{header}Examples:{header:#}\n  {literal}sq add --title \"Investigate checkout exception\" --description \"Review the pasted error report and identify the failing code path\" --text \"Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42\"{literal:#}\n  {literal}rg --json -n -C2 'OldApi.call' | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\"{literal:#}\n  {literal}sq list --ready{literal:#}"
+    ));
+    cmd = cmd.after_help(root_help);
+
+    cmd.mut_subcommand("collect", |subcmd| {
         let styles = subcmd.get_styles();
         let header = styles.get_header();
         let literal = styles.get_literal();
         let help = StyledStr::from(format!(
-            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file --title-template \"review: {{{{filepath}}}}\" --description \"Review ripgrep matches\"{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\"{literal:#}\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
+            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file --title-template \"review: {{{{filepath}}}}\" --description \"Review ripgrep matches\"{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\"{literal:#}\n\nPlain-text {literal}rg{literal:#} output is not supported. Pass ripgrep context flags like {literal}-n{literal:#}, {literal}-C2{literal:#}, {literal}-A2{literal:#}, or {literal}-B2{literal:#} to include line numbers and surrounding context in each created text source.\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
         ));
 
         subcmd.after_help(help)
@@ -38,21 +52,21 @@ pub fn build_cli() -> Command {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Add a new item to the review queue
+    /// Add a new task
     Add(AddArgs),
-    /// Collect items from stdin into queue items
+    /// Collect tasks from stdin
     Collect(CollectArgs),
-    /// List queue items
+    /// List tasks
     List(ListArgs),
-    /// Show details of a queue item
+    /// Show task details
     Show(ShowArgs),
-    /// Edit an existing queue item
+    /// Edit an existing task
     Edit(EditArgs),
-    /// Mark an item as closed
+    /// Mark a task as closed
     Close(StatusArgs),
-    /// Remove an item from the queue
+    /// Remove a task
     Rm(RmArgs),
-    /// Output queue workflow context for AI agents
+    /// Output task workflow context for AI agents
     Prime(PrimeArgs),
 }
 
@@ -100,7 +114,7 @@ pub struct AddArgs {
 }
 
 #[derive(Args)]
-#[command(about = "Collect items from stdin into queue items")]
+#[command(about = "Collect tasks from stdin")]
 pub struct CollectArgs {
     /// Title for every created item
     #[arg(long = "title", value_name = "TITLE", display_order = 1)]
