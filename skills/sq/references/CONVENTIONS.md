@@ -20,7 +20,7 @@ sq add --title "Migrate query helper" \
 
 ## Extensions
 
-When an external tool consumes the queue, scope its metadata under a key named after the extension. This keeps extension-specific fields separate from general metadata and avoids collisions between consumers.
+When an external tool consumes task data, scope its metadata under a key named after the extension. This keeps extension-specific fields separate from general metadata and avoids collisions between consumers.
 
 For example, the `pi_tasks` extension:
 
