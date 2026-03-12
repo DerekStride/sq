@@ -221,6 +221,10 @@ Items carry typed sources that provide context:
 
 Items can declare blockers via `--blocked-by`. Use `sq list --ready` to see only items that are pending and have no open blockers.
 
+## Conventions
+
+For metadata schemas and safety patterns (explicit `--queue` usage), see `references/conventions.md`.
+
 ## Suggested collect workflow
 
 When a user wants to remove or migrate a repeated pattern across a codebase:
