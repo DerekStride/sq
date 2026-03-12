@@ -4,6 +4,8 @@
 
 It manages review and task items in a JSONL queue file. You can use it directly from the shell or instruct agents to manage it for you.
 
+If you're coming from [Beads](https://github.com/steveyegge/beads), see [sq vs. Beads](doc/sq-vs-beads.md) for a comparison of the two tools and the trade-offs `sq` makes in favour of simplicity.
+
 ## Installation
 
 ```bash
