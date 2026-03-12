@@ -203,23 +203,24 @@ fn test_push_with_title_allows_empty_sources() {
 }
 
 #[test]
-fn test_push_with_metadata_allows_empty_sources() {
+fn test_push_with_metadata_only_requires_task_content() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
-    let item = queue
-        .push_with_description(
-            vec![],
-            None,
-            None,
-            None,
-            serde_json::json!({"kind":"task"}),
-            vec![],
-        )
-        .unwrap();
+    let result = queue.push_with_description(
+        vec![],
+        None,
+        None,
+        None,
+        serde_json::json!({"kind":"task"}),
+        vec![],
+    );
 
-    assert_eq!(item.metadata["kind"], "task");
-    assert!(item.sources.is_empty());
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Item requires at least one source, title, or description"));
 }
 
 #[test]
@@ -233,7 +234,28 @@ fn test_push_with_description_requires_some_content_when_sources_empty() {
     assert!(result
         .unwrap_err()
         .to_string()
-        .contains("Item requires at least one source, title, description, or metadata"));
+        .contains("Item requires at least one source, title, or description"));
+}
+
+#[test]
+fn test_push_with_priority_only_requires_task_content() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let result = queue.push_with_description(
+        vec![],
+        None,
+        None,
+        Some(1),
+        serde_json::json!({}),
+        vec![],
+    );
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Item requires at least one source, title, or description"));
 }
 
 #[test]

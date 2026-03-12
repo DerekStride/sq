@@ -200,7 +200,7 @@ fn test_add_no_fields_fails() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "At least one of --description, --title, --metadata, or a source is required",
+            "At least one of --description, --title, or a source is required",
         ));
 }
 
@@ -237,11 +237,11 @@ fn test_add_title_without_sources() {
 }
 
 #[test]
-fn test_add_metadata_without_sources() {
+fn test_add_metadata_without_sources_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
 
-    let output = sq_cmd()
+    sq_cmd()
         .args([
             "-q",
             &qp,
@@ -250,13 +250,25 @@ fn test_add_metadata_without_sources() {
             r#"{"kind":"task"}"#,
             "--json",
         ])
-        .output()
-        .unwrap();
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "At least one of --description, --title, or a source is required",
+        ));
+}
 
-    assert!(output.status.success());
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json["metadata"]["kind"], "task");
-    assert!(json["sources"].as_array().unwrap().is_empty());
+#[test]
+fn test_add_priority_without_sources_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--priority", "1", "--json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "At least one of --description, --title, or a source is required",
+        ));
 }
 
 #[test]

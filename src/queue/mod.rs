@@ -341,23 +341,12 @@ impl Queue {
     }
 
     fn validate_new_item(&self, item: &NewItem) -> Result<()> {
-        let has_metadata = match &item.metadata {
-            serde_json::Value::Object(map) => !map.is_empty(),
-            _ => true,
-        };
-
         if let Some(priority) = item.priority {
             validate_priority(priority)?;
         }
 
-        if item.sources.is_empty()
-            && item.title.is_none()
-            && item.description.is_none()
-            && !has_metadata
-        {
-            anyhow::bail!(
-                "Item requires at least one source, title, description, or metadata"
-            );
+        if item.sources.is_empty() && item.title.is_none() && item.description.is_none() {
+            anyhow::bail!("Item requires at least one source, title, or description");
         }
 
         self.validate_source_types(&item.sources)
