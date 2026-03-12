@@ -1262,7 +1262,7 @@ fn test_version_flag() {
         .args(["--version"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("sq 0.3.0"));
+        .stdout(predicate::str::contains("sq 0.3.1"));
 }
 
 // ── Queue Path Resolution ───────────────────────────────────────────────────
