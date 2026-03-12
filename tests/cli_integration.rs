@@ -23,6 +23,16 @@ fn rg_json_input() -> &'static str {
     )
 }
 
+fn assert_contains_in_order(haystack: &str, needles: &[&str]) {
+    let mut last = 0;
+    for needle in needles {
+        let rel = haystack[last..]
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing `{needle}` in output:\n{haystack}"));
+        last += rel + needle.len();
+    }
+}
+
 // ── Add Command ─────────────────────────────────────────────────────────────
 
 #[test]
@@ -1221,7 +1231,10 @@ fn test_collect_examples_and_templates_appear_in_collect_help() {
         .stdout(predicate::str::contains("Examples:"))
         .stdout(predicate::str::contains("Templates:"))
         .stdout(predicate::str::contains(
-            "rg --json PATTERN | sq collect --by-file",
+            "rg --json PATTERN | sq collect --by-file --title-template \"review: {{filepath}}\" --description \"Review ripgrep matches\"",
+        ))
+        .stdout(predicate::str::contains(
+            "rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{filepath}}\" --description \"Migrate OldApi.call to NewApi.call\"",
         ))
         .stdout(predicate::str::contains("{{filepath}}"))
         .stdout(predicate::str::contains("{{filename}}"))
@@ -1232,6 +1245,59 @@ fn test_collect_examples_and_templates_appear_in_collect_help() {
         .stdout(predicate::str::contains(
             "Collect items from stdin into queue items",
         ));
+}
+
+#[test]
+fn test_add_help_puts_title_and_description_first() {
+    let output = sq_cmd().args(["add", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(
+        &stdout,
+        &[
+            "--title <TITLE>",
+            "--description <TEXT>",
+            "--diff <PATH>",
+            "--file <PATH>",
+            "--text <STRING>",
+        ],
+    );
+}
+
+#[test]
+fn test_collect_help_puts_title_and_description_first() {
+    let output = sq_cmd().args(["collect", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(
+        &stdout,
+        &[
+            "--title <TITLE>",
+            "--description <TEXT>",
+            "--by-file",
+            "--stdin-format <FORMAT>",
+            "--title-template <TEMPLATE>",
+        ],
+    );
+}
+
+#[test]
+fn test_edit_help_puts_title_and_description_first() {
+    let output = sq_cmd().args(["edit", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(
+        &stdout,
+        &[
+            "--set-title <TITLE>",
+            "--set-description <TEXT>",
+            "--set-status <STATUS>",
+            "--add-diff <PATH>",
+        ],
+    );
 }
 
 // ── Prime Command ───────────────────────────────────────────────────────────
