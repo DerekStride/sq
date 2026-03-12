@@ -1,8 +1,8 @@
 # sq vs. Beads
 
-`sq` and [Beads](https://github.com/steveyegge/beads) (`bd`) both give agents a persistent, structured way to track tasks and dependencies.
+`sq` and [Beads](https://github.com/steveyegge/beads) (`bd`) provide a persistent, structured way to track tasks and dependencies.
 
-**TL;DR** — Use `sq` when you want a lightweight queue you can spin up instantly. It supports multi-agent workflows locally via file-level locking. Use Beads when you have multiple agents that need to collaborate across multiple machines.
+**TL;DR** — Use `sq` when you want a lightweight task list you can spin up instantly. It supports multi-agent workflows locally via file-level locking. Use Beads when you have multiple agents that need to collaborate across multiple machines.
 
 ## At a glance
 
@@ -17,11 +17,11 @@
 
 ## Intentional trade-offs
 
-- **No database.** JSONL is less powerful than SQL but is human-readable, git-friendly, and requires zero setup. For queues that fit in memory (most single-repo task lists), this is the right trade-off.
+- **No database.** JSONL is less powerful than SQL but is human-readable, git-friendly, requires zero setup and no management of ongoing processes. For lists that fit in memory (most single-repo task lists), this is the right trade-off.
 
 - **Minimal dependency tracking.** `sq` supports `--blocked-by` and `sq list --ready`, which is just enough for a "pick the next unblocked item" workflow. It does not model richer relationships between items.
 
-- **Weaker agent coordination.** `sq` uses file-level locking rather than a database with atomic operations. This means multiple agents on the same machine can safely read and write the queue, but `sq` does not try to solve distributed coordination across machines. For most single-agent and local multi-agent workflows, this is sufficient — and it means `sq` has no runtime dependencies, no sync protocol, and no merge conflicts to resolve.
+- **Weaker agent coordination.** `sq` uses file-level locking rather than a database with atomic operations. This means multiple agents on the same machine can safely read and write the list, but `sq` does not try to solve distributed coordination across machines. For most single-agent and local multi-agent workflows, this is sufficient — and it means `sq` has no runtime dependencies, no sync protocol, and no merge conflicts to resolve.
 
 ## Where sq is stronger
 
@@ -39,7 +39,7 @@ This also makes integration straightforward. Adding a file source is a single fl
 
 ### Bulk collection from search results
 
-`sq collect --by-file` turns a ripgrep search directly into a queue — one item per file, with match context preserved as a text source and the filepath as a file source.
+`sq collect --by-file` turns a ripgrep search directly into a task list — one item per file, with match context preserved as a text source and the filepath as a file source.
 
 ```bash
 rg --json -n -C2 'OldApi.call' | sq collect --by-file \
