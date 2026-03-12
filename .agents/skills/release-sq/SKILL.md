@@ -30,6 +30,9 @@ Example for `v0.3.0`:
 
 ## Maintainer checklist
 
+* DO NOT create the github release
+* DO NOT publish the crate yourself
+
 This skill documents the prep work up to tag creation/push. The GitHub Release publication and post-publish verification are handled manually afterward.
 
 1. Bump the crate version in `Cargo.toml`.
