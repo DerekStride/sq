@@ -23,7 +23,6 @@ By default, `sq` resolves the queue path to `.sift/queue.jsonl`. Override with:
 
 - `-q, --queue <PATH>` flag
 - `SQ_QUEUE_PATH` environment variable
-- `SIFT_QUEUE_PATH` environment variable (legacy compatibility)
 
 When operating on a project-specific queue, prefer an explicit queue path.
 

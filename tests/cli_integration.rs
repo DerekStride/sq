@@ -1282,21 +1282,6 @@ fn test_env_queue_path() {
     assert!(qp.exists());
 }
 
-#[test]
-fn test_legacy_sift_env_queue_path() {
-    let dir = TempDir::new().unwrap();
-    let qp = dir.path().join("legacy_env_queue.jsonl");
-
-    let output = sq_cmd()
-        .env("SIFT_QUEUE_PATH", qp.to_str().unwrap())
-        .args(["add", "--text", "env test"])
-        .output()
-        .unwrap();
-
-    assert!(output.status.success());
-    assert!(qp.exists());
-}
-
 // ── JSON Field Order ────────────────────────────────────────────────────────
 
 #[test]
