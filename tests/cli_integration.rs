@@ -1347,7 +1347,7 @@ fn test_version_flag() {
         .args(["--version"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("sq 0.4.0"));
+        .stdout(predicate::str::contains("sq 0.4.1"));
 }
 
 // ── Queue Path Resolution ───────────────────────────────────────────────────
