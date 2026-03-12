@@ -8,6 +8,14 @@ If you're coming from [Beads](https://github.com/steveyegge/beads), see [sq vs. 
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew install derekstride/tap/sift-queue
+```
+
+### Cargo
+
 ```bash
 cargo install sift-queue
 ```
