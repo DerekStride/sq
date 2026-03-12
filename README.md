@@ -118,3 +118,11 @@ cargo test
 cargo test --test cli_integration
 cargo test --test queue_parity
 ```
+
+## FAQ
+
+### Where's the queue?
+
+The initial design was meant to manage a queue for [`sift`](https://github.com/derekstride/sift) a Human-in-the-loop review tool I was building. That model stopped making sense pretty quickly as the tool evolved. The current tool is better understood as a lightweight task list with structured sources, filtering, and dependency state.
+
+The name stuck because it was short, memorable, and already embedded in the CLI (`sq`, `-q`, `--queue`). Keeping the name does not mean `sq` is trying to be a literal FIFO queue.
