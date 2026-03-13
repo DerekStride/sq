@@ -1617,6 +1617,17 @@ fn test_prime_output() {
         .stdout(predicate::str::contains("JSONL queue").not());
 }
 
+#[test]
+fn test_prime_help_has_no_full_flag() {
+    sq_cmd()
+        .args(["prime", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Output task workflow context for AI agents"))
+        .stdout(predicate::str::contains("--full").not())
+        .stdout(predicate::str::contains("Force full CLI output").not());
+}
+
 // ── Version Flag ────────────────────────────────────────────────────────────
 
 #[test]

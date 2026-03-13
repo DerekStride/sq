@@ -18,7 +18,7 @@ fn main() {
             sift_queue::cli::commands::status::execute(args, queue_path, "closed")
         }
         Commands::Rm(ref args) => sift_queue::cli::commands::rm::execute(args, queue_path),
-        Commands::Prime(_) => sift_queue::cli::commands::prime::execute(),
+        Commands::Prime => sift_queue::cli::commands::prime::execute(),
     };
 
     match exit_code {

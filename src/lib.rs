@@ -87,7 +87,7 @@ pub enum Commands {
     /// Remove a task
     Rm(RmArgs),
     /// Output task workflow context for AI agents
-    Prime(PrimeArgs),
+    Prime,
 }
 
 #[derive(Parser)]
@@ -308,9 +308,3 @@ pub struct RmArgs {
     pub json: bool,
 }
 
-#[derive(Parser)]
-pub struct PrimeArgs {
-    /// Force full CLI output
-    #[arg(long = "full")]
-    pub full: bool,
-}
