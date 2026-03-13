@@ -1453,7 +1453,6 @@ fn test_collect_appears_in_main_help() {
         .stdout(predicate::str::contains("collect"))
         .stdout(predicate::str::contains("Path to task file"))
         .stdout(predicate::str::contains(".sift/issues.jsonl"))
-        .stdout(predicate::str::contains("sq list --ready"))
         .stdout(predicate::str::contains("Manage Sift's review queue").not());
 }
 
@@ -1466,12 +1465,8 @@ fn test_collect_examples_and_templates_appear_in_collect_help() {
         .stdout(predicate::str::contains("Examples:"))
         .stdout(predicate::str::contains("Templates:"))
         .stdout(predicate::str::contains(
-            "rg --json PATTERN | sq collect --by-file --title-template \"review: {{filepath}}\" --description \"Review ripgrep matches\"",
+            "rg --json PATTERN | sq collect --by-file",
         ))
-        .stdout(predicate::str::contains(
-            "rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{filepath}}\" --description \"Migrate OldApi.call to NewApi.call\"",
-        ))
-        .stdout(predicate::str::contains("Plain-text rg output is not supported."))
         .stdout(predicate::str::contains("{{filepath}}"))
         .stdout(predicate::str::contains("{{filename}}"))
         .stdout(predicate::str::contains("{{match_count}}"))
@@ -1555,6 +1550,25 @@ fn test_list_help_includes_priority_filter_near_other_filters() {
     );
 }
 
+#[test]
+fn test_list_help_documents_views_and_dependencies() {
+    sq_cmd()
+        .args(["list", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Views:"))
+        .stdout(predicate::str::contains("sq list --ready"))
+        .stdout(predicate::str::contains(
+            "Show only actionable work: pending items with no open blockers",
+        ))
+        .stdout(predicate::str::contains(
+            "Default view: show all non-closed items so blocked dependencies and in_progress work remain visible",
+        ))
+        .stdout(predicate::str::contains("Dependencies:"))
+        .stdout(predicate::str::contains("--blocked-by <id1,id2>"))
+        .stdout(predicate::str::contains("sq edit <id> --set-blocked-by ..."));
+}
+
 // ── Prime Command ───────────────────────────────────────────────────────────
 
 #[test]
@@ -1572,6 +1586,15 @@ fn test_prime_output() {
         .stdout(predicate::str::contains(".sift/issues.jsonl"))
         .stdout(predicate::str::contains("## Examples"))
         .stdout(predicate::str::contains("sq list --ready"))
+        .stdout(predicate::str::contains("## Readiness and dependencies"))
+        .stdout(predicate::str::contains("Dependencies are modeled with `blocked_by`"))
+        .stdout(predicate::str::contains(
+            "- `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work stay visible",
+        ))
+        .stdout(predicate::str::contains(
+            "When choosing the next task to start, prefer `sq list --ready`.",
+        ))
+        .stdout(predicate::str::contains("sq edit xyz789 --set-blocked-by abc123,def456"))
         .stdout(predicate::str::contains("## Priority"))
         .stdout(predicate::str::contains(
             "Priority uses the inclusive range `0..4`, where `0` is highest.",

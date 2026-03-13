@@ -33,6 +33,27 @@ rg --json -n -C2 'OldApi.call' | sq collect --by-file \
 sq list --ready
 ```
 
+## Readiness and dependencies
+
+Dependencies are modeled with `blocked_by`: an item is ready when it is `pending` and none of its blocker IDs refer to another open `pending` item.
+
+Use these list views intentionally:
+
+- `sq list --ready` — actionable work only (`pending` and unblocked)
+- `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work stay visible
+- `sq list --all` — include closed items for history/auditing
+
+When choosing the next task to start, prefer `sq list --ready`.
+
+Blocker management examples:
+
+```bash
+sq add --title "Implement feature" --blocked-by abc123
+sq edit xyz789 --set-blocked-by abc123,def456
+sq edit xyz789 --set-blocked-by ""
+sq show xyz789
+```
+
 ## Priority
 
 Priority uses the inclusive range `0..4`, where `0` is highest.

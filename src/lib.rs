@@ -41,20 +41,33 @@ pub fn build_cli() -> Command {
     let header = styles.get_header();
     let literal = styles.get_literal();
     let root_help = StyledStr::from(format!(
-        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}\n\n{header}Examples:{header:#}\n  {literal}sq add --title \"Investigate checkout exception\" --description \"Review the pasted error report and identify the failing code path\" --priority 1 --text \"Sentry alert: NoMethodError in Checkout::ApplyDiscount at app/services/checkout/apply_discount.rb:42\"{literal:#}\n  {literal}rg --json -n -C2 'OldApi.call' | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\" --priority 2{literal:#}\n  {literal}sq list --ready{literal:#}"
+        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}"
     ));
     cmd = cmd.after_help(root_help);
 
-    cmd.mut_subcommand("collect", |subcmd| {
+    cmd = cmd.mut_subcommand("collect", |subcmd| {
         let styles = subcmd.get_styles();
         let header = styles.get_header();
         let literal = styles.get_literal();
         let help = StyledStr::from(format!(
-            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file --title-template \"review: {{{{filepath}}}}\" --description \"Review ripgrep matches\"{literal:#}\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file --title-template \"migrate: {{{{filepath}}}}\" --description \"Migrate OldApi.call to NewApi.call\"{literal:#}\n\nPlain-text {literal}rg{literal:#} output is not supported. Pass ripgrep context flags like {literal}-n{literal:#}, {literal}-C2{literal:#}, {literal}-A2{literal:#}, or {literal}-B2{literal:#} to include line numbers and surrounding context in each created text source.\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
+            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file --title-template \"review: {{{{filepath}}}}\"\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
         ));
 
         subcmd.after_help(help)
-    })
+    });
+
+    cmd = cmd.mut_subcommand("list", |subcmd| {
+        let styles = subcmd.get_styles();
+        let header = styles.get_header();
+        let literal = styles.get_literal();
+        let help = StyledStr::from(format!(
+            "{header}Views:{header:#}\n  {literal}sq list --ready{literal:#}  Show only actionable work: {literal}pending{literal:#} items with no open blockers\n  {literal}sq list{literal:#}          Default view: show all non-closed items so blocked dependencies and {literal}in_progress{literal:#} work remain visible\n  {literal}sq list --all{literal:#}    Include closed items for history\n\n{header}Dependencies:{header:#}\n  Use {literal}--blocked-by <id1,id2>{literal:#} on {literal}sq add{literal:#} or {literal}sq collect{literal:#} to declare blockers.\n  Use {literal}sq edit <id> --set-blocked-by ...{literal:#} to update blockers later."
+        ));
+
+        subcmd.after_help(help)
+    });
+
+    cmd
 }
 
 #[derive(Subcommand)]

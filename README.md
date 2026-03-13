@@ -62,6 +62,18 @@ By default, `sq` uses `.sift/issues.jsonl`. You can override it with:
 
 Use `sq --help` for a full list of options.
 
+### List views and dependencies
+
+Dependencies are modeled with `blocked_by`. An item is considered ready when it is `pending` and none of its blocker IDs refer to another open `pending` item.
+
+Use these views intentionally:
+
+- `sq list --ready` — actionable work only (`pending` and unblocked)
+- `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work remain visible
+- `sq list --all` — include closed items for history/auditing
+
+When choosing the next task to start, prefer `sq list --ready`.
+
 ### Examples
 
 ```bash
