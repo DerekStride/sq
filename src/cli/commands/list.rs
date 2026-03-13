@@ -1,5 +1,5 @@
 use crate::cli::formatters;
-use crate::queue::{Item, Queue};
+use crate::queue::{parse_priority_value, Item, Queue};
 use crate::ListArgs;
 use anyhow::Result;
 use std::collections::HashSet;
@@ -24,6 +24,19 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
             .filter(|item| item.status != "closed")
             .collect()
     };
+
+    if !args.priority.is_empty() {
+        let requested_priorities: HashSet<u8> = args
+            .priority
+            .iter()
+            .map(|value| parse_priority_value(value))
+            .collect::<Result<_>>()?;
+
+        items.retain(|item| {
+            item.priority
+                .is_some_and(|priority| requested_priorities.contains(&priority))
+        });
+    }
 
     // Apply jq filter
     if let Some(ref filter_expr) = args.filter {

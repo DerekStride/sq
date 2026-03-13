@@ -387,6 +387,70 @@ fn test_list_default_sorts_by_priority() {
 }
 
 #[test]
+fn test_list_filters_by_repeatable_priority_flag() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "p1", "--priority", "1"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "p0", "--priority", "0"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "p4", "--priority", "4"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "none"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "list",
+            "--priority",
+            "0",
+            "--priority",
+            "1",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["title"], "p0");
+    assert_eq!(items[1]["title"], "p1");
+}
+
+#[test]
+fn test_list_priority_filter_rejects_invalid_value() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "p1", "--priority", "1"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "list", "--priority", "P9"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid priority: P9. Valid: 0-4"));
+}
+
+#[test]
 fn test_list_default_excludes_closed() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -1469,6 +1533,24 @@ fn test_edit_help_puts_title_and_description_first() {
             "--set-status <STATUS>",
             "--set-priority <PRIORITY>",
             "--add-diff <PATH>",
+        ],
+    );
+}
+
+#[test]
+fn test_list_help_includes_priority_filter_near_other_filters() {
+    let output = sq_cmd().args(["list", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(
+        &stdout,
+        &[
+            "--status <STATUS>",
+            "--all",
+            "--priority <PRIORITY>",
+            "--ready",
+            "--json",
         ],
     );
 }

@@ -167,32 +167,36 @@ pub struct CollectArgs {
 #[derive(Parser)]
 pub struct ListArgs {
     /// Filter by status (pending|in_progress|closed)
-    #[arg(long = "status", value_name = "STATUS")]
+    #[arg(long = "status", value_name = "STATUS", display_order = 1)]
     pub status: Option<String>,
 
     /// Include closed items when status is not explicitly filtered
-    #[arg(long = "all")]
+    #[arg(long = "all", display_order = 2)]
     pub all: bool,
 
+    /// Filter by priority (repeatable: 0-4)
+    #[arg(long = "priority", value_name = "PRIORITY", display_order = 3)]
+    pub priority: Vec<String>,
+
+    /// Show only ready items (pending and unblocked)
+    #[arg(long = "ready", display_order = 4)]
+    pub ready: bool,
+
     /// Output as JSON
-    #[arg(long = "json")]
+    #[arg(long = "json", display_order = 10)]
     pub json: bool,
 
     /// jq select expression
-    #[arg(long = "filter", value_name = "EXPR")]
+    #[arg(long = "filter", value_name = "EXPR", display_order = 11)]
     pub filter: Option<String>,
 
     /// jq path expression to sort by
-    #[arg(long = "sort", value_name = "PATH")]
+    #[arg(long = "sort", value_name = "PATH", display_order = 12)]
     pub sort: Option<String>,
 
     /// Reverse sort order
-    #[arg(long = "reverse")]
+    #[arg(long = "reverse", display_order = 13)]
     pub reverse: bool,
-
-    /// Show only ready items (pending and unblocked)
-    #[arg(long = "ready")]
-    pub ready: bool,
 }
 
 #[derive(Parser)]
