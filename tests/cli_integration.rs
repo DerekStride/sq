@@ -1718,3 +1718,531 @@ fn test_json_output_includes_priority_when_present() {
     assert_eq!(json["id"], id);
     assert_eq!(json["priority"], 1);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUDIT — Failing tests for discovered bugs, edge cases, and missing validation
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── BUG: Duplicate --rm-source indices removes more sources than intended ────
+//
+// If a user passes `--rm-source 0 --rm-source 0`, the code sorts+reverses
+// without deduplication. The first removal shifts indices, so the second
+// removal hits a *different* source than intended. Given sources [a, b, c],
+// `--rm-source 0 --rm-source 0` removes a (index 0), then b (now at index 0),
+// leaving only [c] — the user meant to remove only one source.
+#[test]
+fn test_edit_duplicate_rm_source_indices_should_dedup() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q", &qp, "add", "--text", "a", "--text", "b", "--text", "c",
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Remove index 0 twice — user intent: remove only one source
+    sq_cmd()
+        .args([
+            "-q", &qp, "edit", &id, "--rm-source", "0", "--rm-source", "0",
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let sources = json["sources"].as_array().unwrap();
+
+    // After removing index 0 once, we should have [b, c] — two sources left.
+    // BUG: Currently removes two sources (a and b), leaving only [c].
+    assert_eq!(
+        sources.len(),
+        2,
+        "Duplicate --rm-source 0 should only remove one source, not two"
+    );
+}
+
+// ── BUG: edit --add-transcript bypasses VALID_SOURCE_TYPES validation ────────
+//
+// The edit command can add transcript sources via --add-transcript, but
+// "transcript" is not in VALID_SOURCE_TYPES. The `add` command properly
+// validates source types, but `edit` constructs Source structs from JSON
+// values and never calls validate_source_types on the result. This means
+// `edit` silently introduces sources that `add` would reject.
+#[test]
+fn test_edit_add_transcript_should_be_validated_against_source_types() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Adding transcript via --add-transcript should either succeed (if
+    // transcript is a valid type) or fail with a validation error.
+    // Currently it silently succeeds even though "transcript" is not
+    // in VALID_SOURCE_TYPES.
+    let output = sq_cmd()
+        .args([
+            "-q", &qp, "edit", &id, "--add-transcript", "/session.jsonl",
+        ])
+        .output()
+        .unwrap();
+
+    // If transcript is a valid type, the add command should also accept it.
+    // If it's not valid, edit should reject it.
+    // This test asserts the two commands should be consistent:
+    // Either both accept transcript OR both reject it.
+    let edit_succeeded = output.status.success();
+
+    // Try adding a transcript source via the add command's --stdin type
+    let add_output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "placeholder"])
+        .output()
+        .unwrap();
+    assert!(add_output.status.success(), "baseline add should work");
+
+    // The add command has no --transcript flag at all, so there's no way
+    // to add a transcript source via `sq add` — only via `sq edit`.
+    // This inconsistency should be resolved.
+    assert!(
+        !edit_succeeded,
+        "edit --add-transcript should reject 'transcript' type since it's not in VALID_SOURCE_TYPES, \
+         but currently it silently succeeds"
+    );
+}
+
+// ── MISSING VALIDATION: list --status with invalid status silently returns empty
+//
+// `sq list --status bogus` doesn't error — it just shows no results.
+// Compare with `sq edit --set-status bogus` which properly validates.
+// Users get no feedback that they misspelled a status.
+#[test]
+fn test_list_invalid_status_should_error() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .assert()
+        .success();
+
+    // Using a bogus status should give an error, not silently return nothing
+    sq_cmd()
+        .args(["-q", &qp, "list", "--status", "bogus_status"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid status"));
+}
+
+// ── INCONSISTENCY: Cannot remove all sources from item with title/description ─
+//
+// The `add` command allows creating items with no sources (just title or
+// description). But `edit --rm-source` blocks removing all sources, even
+// when the item has a title or description. This creates an inconsistency:
+// you can create source-less items, but you can't edit an item to be source-less.
+#[test]
+fn test_edit_rm_all_sources_should_succeed_when_item_has_title() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q", &qp, "add", "--title", "Has title", "--text", "remove me",
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Item has a title, so removing all sources should be fine — the item
+    // is still valid (sq add --title "x" works without sources)
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--rm-source", "0"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        json["sources"].as_array().unwrap().is_empty(),
+        "Sources should be empty after removing the only source from a titled item"
+    );
+}
+
+// ── EDGE CASE: edit --set-title to empty string ──────────────────────────────
+//
+// Setting a title to "" creates an item with an empty string title, which
+// is different from None. The JSON will contain `"title":""` instead of
+// omitting the field. This is arguably a bug — empty string should either
+// be rejected or treated as clearing the title.
+#[test]
+fn test_edit_set_title_empty_string_should_clear_or_reject() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "Original", "--text", "x"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-title", ""])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    // An empty title should either be None (field omitted) or rejected.
+    // Currently it's set to "" which serializes as "title":"" — not ideal.
+    assert!(
+        json.get("title").is_none(),
+        "Empty string title should be treated as clearing the title (None), \
+         but currently serializes as an empty string"
+    );
+}
+
+// ── EDGE CASE: close already-closed item succeeds silently ───────────────────
+//
+// Closing an already-closed item is a no-op that succeeds. This could mask
+// accidental double-closes. At minimum the user should get a warning.
+#[test]
+fn test_close_already_closed_item_should_warn_or_noop() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "close", &id])
+        .assert()
+        .success();
+
+    // Closing again should indicate it's already closed
+    sq_cmd()
+        .args(["-q", &qp, "close", &id])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("already closed").or(predicate::str::contains("no change")));
+}
+
+// ── EDGE CASE: add --priority boundary values ────────────────────────────────
+//
+// Priority 5 is out of range but the error message should be clear.
+// Also tests negative-like strings.
+#[test]
+fn test_add_priority_out_of_range_high() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "x", "--priority", "5"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid priority"));
+}
+
+#[test]
+fn test_add_priority_negative() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "x", "--priority", "-1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid priority"));
+}
+
+// ── EDGE CASE: blocked-by with self-reference ────────────────────────────────
+//
+// An item shouldn't be able to block itself, but there's no validation.
+// Since IDs are generated at push time, you can't self-block on add, but
+// you can do it via edit.
+#[test]
+fn test_edit_set_blocked_by_self_should_error_or_ignore() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Setting an item to be blocked by itself should either fail or be ignored
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-blocked-by", &id])
+        .assert()
+        .success();
+
+    // If self-blocking is allowed, the item should NOT appear in --ready
+    // because it blocks itself. Let's verify list --ready handles this sanely.
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--ready", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+
+    // The self-blocked item IS in pending_ids, and it blocks itself,
+    // so it should NOT be ready. This test verifies that.
+    assert_eq!(
+        items.len(),
+        0,
+        "Self-blocked item should not appear in ready list"
+    );
+}
+
+// ── EDGE CASE: list --ready with in_progress blockers ────────────────────────
+//
+// An item blocked by an in_progress item is considered "ready" because
+// ready() only checks pending_ids. This means an item whose dependency
+// is still being worked on shows up as actionable. This is documented
+// behavior but may be surprising.
+#[test]
+fn test_list_ready_considers_in_progress_blockers() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    // Create blocker
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker", "--title", "Blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Create blocked item
+    sq_cmd()
+        .args([
+            "-q", &qp, "add", "--text", "blocked", "--title", "Blocked",
+            "--blocked-by", &blocker_id,
+        ])
+        .assert()
+        .success();
+
+    // Move blocker to in_progress (not closed/done)
+    sq_cmd()
+        .args(["-q", &qp, "edit", &blocker_id, "--set-status", "in_progress"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--ready", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    let titles: Vec<&str> = items
+        .iter()
+        .filter_map(|i| i["title"].as_str())
+        .collect();
+
+    // Currently "Blocked" appears in ready because blocker is in_progress
+    // (not pending), so it's not in pending_ids. This test documents that
+    // in_progress blockers don't actually block readiness.
+    // If the intended behavior is that in_progress items also block, this
+    // test should assert that "Blocked" is NOT in the ready list.
+    assert!(
+        !titles.contains(&"Blocked"),
+        "Item blocked by an in_progress item should NOT be considered ready — \
+         the blocker is still being worked on. Currently it IS shown as ready."
+    );
+}
+
+// ── EDGE CASE: show with no queue file ───────────────────────────────────────
+//
+// Running show on a nonexistent queue file should give a clear error.
+#[test]
+fn test_show_on_nonexistent_queue_file() {
+    let dir = TempDir::new().unwrap();
+    let qp = dir.path().join("does_not_exist.jsonl").to_str().unwrap().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "show", "abc"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found").or(predicate::str::contains("No such file")));
+}
+
+// ── EDGE CASE: list on nonexistent queue file ────────────────────────────────
+//
+// Running list on a nonexistent queue file should show "No items found".
+#[test]
+fn test_list_on_nonexistent_queue_file() {
+    let dir = TempDir::new().unwrap();
+    let qp = dir.path().join("does_not_exist.jsonl").to_str().unwrap().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "list"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("No items found"));
+}
+
+// ── EDGE CASE: add with non-object metadata ──────────────────────────────────
+//
+// Metadata should be a JSON object. Passing an array or scalar should fail.
+#[test]
+fn test_add_metadata_non_object_should_fail() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    // Array metadata
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "x", "--metadata", "[1,2,3]"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("must be a JSON object").or(
+            predicate::str::contains("Invalid"),
+        ));
+}
+
+// ── EDGE CASE: edit --set-metadata to non-object ─────────────────────────────
+//
+// --set-metadata with a non-object value should fail, similar to how
+// --merge-metadata already validates this.
+#[test]
+fn test_edit_set_metadata_non_object_should_fail() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "x"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Setting metadata to a string should fail
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-metadata", "\"just a string\""])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("must be a JSON object").or(
+            predicate::str::contains("Invalid"),
+        ));
+}
+
+// ── EDGE CASE: rm-source with out-of-range index ─────────────────────────────
+//
+// Passing an out-of-range index to --rm-source gives a warning but still
+// succeeds. It would be better to fail with an error.
+#[test]
+fn test_edit_rm_source_out_of_range_should_error() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "only"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Index 5 doesn't exist — only index 0 does
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--rm-source", "5"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("out of range").or(
+            predicate::str::contains("index"),
+        ));
+}
+
+// ── EDGE CASE: collect --by-file with --title sets same title for all items ──
+//
+// When using --title with collect, every item gets the exact same title.
+// This works but may not be what users expect vs --title-template.
+// Verify the behavior is at least consistent.
+#[test]
+fn test_collect_with_title_gives_all_items_same_title() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q", &qp, "collect", "--by-file", "--title", "Same for all", "--json",
+        ])
+        .write_stdin(rg_json_input())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    // Both items should have the same title
+    assert_eq!(items[0]["title"], "Same for all");
+    assert_eq!(items[1]["title"], "Same for all");
+}
+
+// ── EDGE CASE: list --reverse without --sort ─────────────────────────────────
+//
+// --reverse should work with the default sort order too.
+#[test]
+fn test_list_reverse_with_default_sort() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "first", "--priority", "0"])
+        .assert()
+        .success();
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "second", "--priority", "4"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--reverse", "--json"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    // Default sort: priority 0 first, then 4. Reversed: 4 first, then 0.
+    assert_eq!(items[0]["title"], "second");
+    assert_eq!(items[1]["title"], "first");
+}
+
+// ── DOCUMENTATION: Prime output uses 6-char IDs but generated IDs are 3-char ─
+//
+// The prime command includes examples like `abc123`, `xyz789`, `def456` which
+// are 6 characters, but generate_id() creates 3-character IDs. This could
+// confuse users/agents.
+#[test]
+fn test_prime_example_ids_match_generated_id_length() {
+    let output = sq_cmd()
+        .args(["prime"])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // The examples use abc123, xyz789, def456 which are 6 chars.
+    // These should match the actual ID format (3-char alphanumeric).
+    // This test will fail because prime hardcodes 6-char example IDs.
+    assert!(
+        !stdout.contains("abc123"),
+        "Prime examples should use 3-char IDs to match actual generated IDs, \
+         but contains 'abc123' (6 chars)"
+    );
+}

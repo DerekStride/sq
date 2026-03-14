@@ -808,6 +808,309 @@ fn test_metadata_preserved() {
     assert_eq!(found.metadata["array"], serde_json::json!([1, 2, 3]));
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// AUDIT — Failing tests for discovered bugs, edge cases, and missing validation
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── BUG: push() rejects empty sources but push_with_description() doesn't ───
+//
+// These two APIs have asymmetric validation. push() always requires sources,
+// but push_with_description() allows empty sources if there's a title.
+// This is intentional, but push() bypasses this by calling validate_sources()
+// first and then delegating to push_with_description(). The two codepaths
+// give different errors for the same underlying situation.
+#[test]
+fn test_push_error_message_matches_push_with_description() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    // push() with empty sources + title gives "Sources cannot be empty"
+    let push_err = queue
+        .push(vec![], Some("Title".to_string()), None, serde_json::json!({}), vec![])
+        .unwrap_err();
+
+    // But this should succeed because there IS a title — same as push_with_description
+    // BUG: push() rejects valid input that push_with_description() accepts
+    let push_desc_result = queue.push_with_description(
+        vec![],
+        Some("Title".to_string()),
+        None,
+        None,
+        serde_json::json!({}),
+        vec![],
+    );
+
+    assert!(
+        push_desc_result.is_ok(),
+        "push_with_description accepts empty sources with title"
+    );
+
+    // The push() error says "Sources cannot be empty" even though the item
+    // has a title and would be valid. This is because push() pre-validates
+    // sources before delegating.
+    assert!(
+        !push_err.to_string().contains("Sources cannot be empty"),
+        "push() should not reject items with a title just because sources are empty. \
+         Error was: {}",
+        push_err
+    );
+}
+
+// ── BUG: update() validates status but not source types ──────────────────────
+//
+// Queue::update() validates status values but does NOT validate source types
+// when sources are replaced. You can update an item's sources to contain
+// invalid types like "transcript" or "bogus" through the update API.
+#[test]
+fn test_update_should_validate_source_types() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    // Replacing sources with an invalid type should fail
+    let result = queue.update(
+        &item.id,
+        UpdateAttrs {
+            sources: Some(vec![Source {
+                type_: "invalid_type".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }]),
+            ..Default::default()
+        },
+    );
+
+    assert!(
+        result.is_err(),
+        "update() should validate source types but currently doesn't"
+    );
+}
+
+// ── EDGE CASE: ready() with self-blocked item ────────────────────────────────
+//
+// An item that blocks itself should not be considered ready.
+#[test]
+fn test_ready_self_blocked_item_not_ready() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("self-blocker".to_string()),
+            }],
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    // Set item to block itself
+    queue
+        .update(
+            &item.id,
+            UpdateAttrs {
+                blocked_by: Some(vec![item.id.clone()]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let ready = queue.ready();
+    assert!(
+        ready.is_empty() || !ready.iter().any(|i| i.id == item.id),
+        "Self-blocked item should not appear in ready list"
+    );
+}
+
+// ── EDGE CASE: ready() with in_progress blocker ──────────────────────────────
+//
+// Currently ready() only considers pending items as blockers. An item
+// blocked by an in_progress item is considered "ready" because the blocker
+// isn't pending. This may be surprising.
+#[test]
+fn test_ready_blocked_by_in_progress_is_not_ready() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let blocker = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocker".to_string()),
+            }],
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let blocked = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocked".to_string()),
+            }],
+            None,
+            None,
+            serde_json::json!({}),
+            vec![blocker.id.clone()],
+        )
+        .unwrap();
+
+    // Move blocker to in_progress
+    queue
+        .update(
+            &blocker.id,
+            UpdateAttrs {
+                status: Some("in_progress".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let ready = queue.ready();
+    // The blocked item should NOT be ready because its blocker is in_progress
+    // BUG: Currently the blocked item IS considered ready because ready()
+    // only looks at pending_ids, and in_progress items aren't pending.
+    assert!(
+        !ready.iter().any(|i| i.id == blocked.id),
+        "Item blocked by in_progress item should not be ready"
+    );
+}
+
+// ── EDGE CASE: ID generation with nearly-full ID space ───────────────────────
+//
+// With 3-char alphanumeric IDs (36^3 = 46656 possibilities), the generator
+// loops until it finds an unused one. This test doesn't exercise exhaustion
+// but verifies the ID space characteristics.
+#[test]
+fn test_id_uses_lowercase_and_digits_only() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    for _ in 0..50 {
+        let item = queue
+            .push(
+                vec![Source {
+                    type_: "text".to_string(),
+                    path: None,
+                    content: Some("test".to_string()),
+                }],
+                None,
+                None,
+                serde_json::json!({}),
+                vec![],
+            )
+            .unwrap();
+
+        assert_eq!(item.id.len(), 3);
+        assert!(
+            item.id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            "ID should only contain lowercase letters and digits: {}",
+            item.id
+        );
+        // No uppercase letters
+        assert!(
+            !item.id.chars().any(|c| c.is_ascii_uppercase()),
+            "ID should not contain uppercase letters: {}",
+            item.id
+        );
+    }
+}
+
+// ── FIXTURE DISCREPANCY: x1y has priority in metadata but not as first-class field
+//
+// The fixture file's x1y item has {"workflow":"analyze","priority":1} in
+// metadata, but no top-level "priority" field. This is a legacy data shape
+// from before priority was promoted to a first-class field. The fixture
+// should be updated to reflect the current schema.
+#[test]
+fn test_fixture_x1y_has_first_class_priority() {
+    let fixture = include_str!("fixtures/queue_samples.jsonl");
+    let items: Vec<Item> = fixture
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+
+    let x1y = items.iter().find(|i| i.id == "x1y").unwrap();
+    // The fixture has priority:1 in metadata but NOT as a first-class field
+    assert!(
+        x1y.priority.is_some(),
+        "Fixture item x1y should have priority as a first-class field, \
+         but it only exists in metadata: {:?}",
+        x1y.metadata
+    );
+}
+
+// ── EDGE CASE: update with no changes still bumps updated_at ─────────────────
+//
+// Calling update() with an UpdateAttrs that matches the current state still
+// changes updated_at. This means the item appears modified even though
+// nothing actually changed.
+#[test]
+fn test_update_with_same_values_bumps_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    // Wait a tiny bit so timestamp would differ
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    // "Update" with the same status
+    let updated = queue
+        .update(
+            &item.id,
+            UpdateAttrs {
+                status: Some("pending".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+    // updated_at was bumped even though nothing changed
+    // This documents the current behavior (not necessarily a bug,
+    // but worth knowing about)
+    assert_ne!(
+        updated.updated_at, item.updated_at,
+        "update() always bumps updated_at even when values don't change"
+    );
+}
+
 // ── Fixture-based Parsing Test ──────────────────────────────────────────────
 
 #[test]
