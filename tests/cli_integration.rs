@@ -1373,6 +1373,87 @@ fn test_close_command_json() {
 }
 
 #[test]
+fn test_close_command_already_closed_is_explicit_and_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd().args(["-q", &qp, "close", &id]).assert().success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let before: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "close", &id])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), id);
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains(&format!("Item {} is already closed", id)));
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let after: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(after["status"], "closed");
+    assert_eq!(after["updated_at"], before["updated_at"]);
+}
+
+#[test]
+fn test_close_command_json_already_closed_is_explicit_and_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd().args(["-q", &qp, "close", &id]).assert().success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let before: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "close", &id, "--json"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["id"], id);
+    assert_eq!(json["status"], "closed");
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains(&format!("Item {} is already closed", id)));
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let after: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(after["updated_at"], before["updated_at"]);
+}
+
+#[test]
 fn test_status_command_not_found() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
