@@ -1172,6 +1172,33 @@ fn test_edit_deduplicates_duplicate_rm_source_indices() {
 }
 
 #[test]
+fn test_edit_rm_source_out_of_range_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "only source"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--rm-source", "99"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Source index 99 out of range"));
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let sources = json["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0]["content"], "only source");
+}
+
+#[test]
 fn test_edit_cannot_remove_all_sources() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);

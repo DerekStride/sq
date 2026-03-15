@@ -146,13 +146,13 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         let mut rm_indices: Vec<usize> = args.rm_source.clone();
         rm_indices.sort_unstable();
         rm_indices.dedup();
+        if let Some(index) = rm_indices.iter().find(|&&index| index >= sources.len()) {
+            eprintln!("Error: Source index {} out of range", index);
+            return Ok(1);
+        }
         rm_indices.reverse();
         for index in rm_indices {
-            if index < sources.len() {
-                sources.remove(index);
-            } else {
-                eprintln!("Warning: Source index {} out of range", index);
-            }
+            sources.remove(index);
         }
 
         // Add new sources
