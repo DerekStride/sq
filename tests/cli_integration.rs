@@ -1581,23 +1581,40 @@ fn test_prime_output() {
             "# sq — Lightweight task-list CLI with structured sources",
         ))
         .stdout(predicate::str::contains(
-            "`sq` manages tasks in a JSONL file for agent workflows.",
+            "Use `sq` to manage tasks in a JSONL file during agent workflows.",
         ))
-        .stdout(predicate::str::contains(".sift/issues.jsonl"))
+        .stdout(predicate::str::contains("Default queue path: `.sift/issues.jsonl`."))
         .stdout(predicate::str::contains("## Examples"))
         .stdout(predicate::str::contains("sq list --ready"))
         .stdout(predicate::str::contains("## Readiness and dependencies"))
-        .stdout(predicate::str::contains("Dependencies are modeled with `blocked_by`"))
+        .stdout(predicate::str::contains(
+            "Use `blocked_by` to model dependencies.",
+        ))
         .stdout(predicate::str::contains(
             "- `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work stay visible",
         ))
         .stdout(predicate::str::contains(
-            "When choosing the next task to start, prefer `sq list --ready`.",
+            "When you need the next task, start with `sq list --ready`.",
         ))
         .stdout(predicate::str::contains("sq edit xyz789 --set-blocked-by abc123,def456"))
         .stdout(predicate::str::contains("## Priority"))
         .stdout(predicate::str::contains(
             "Priority uses the inclusive range `0..4`, where `0` is highest.",
+        ))
+        .stdout(predicate::str::contains(
+            "Use priority to order ready work. Do not treat it as a measure of overall importance.",
+        ))
+        .stdout(predicate::str::contains(
+            "Combine `priority` with `blocked_by` so ready items form a practical next-work queue.",
+        ))
+        .stdout(predicate::str::contains(
+            "User instruction overrides queue order.",
+        ))
+        .stdout(predicate::str::contains(
+            "If the user asks for a specific task, do that task even when other tasks have higher priority.",
+        ))
+        .stdout(predicate::str::contains(
+            "Do not treat lower-priority tasks as ignorable; they are just not the default next task.",
         ))
         .stdout(predicate::str::contains("## `sq` Commands"))
         .stdout(predicate::str::contains("### `sq add` — Add a new task"))
@@ -1618,12 +1635,26 @@ fn test_prime_output() {
 }
 
 #[test]
-fn test_prime_help_has_no_full_flag() {
+fn test_prime_prelude_skips_command_reference() {
+    sq_cmd()
+        .args(["prime", "--prelude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("## Priority"))
+        .stdout(predicate::str::contains("## `sq` Commands").not())
+        .stdout(predicate::str::contains("### `sq add` — Add a new task").not())
+        .stdout(predicate::str::contains("### `sq collect` — Collect tasks from stdin").not());
+}
+
+#[test]
+fn test_prime_help_has_prelude_flag_and_no_full_flag() {
     sq_cmd()
         .args(["prime", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Output task workflow context for AI agents"))
+        .stdout(predicate::str::contains("--prelude"))
+        .stdout(predicate::str::contains("Output only the prelude and skip the command reference"))
         .stdout(predicate::str::contains("--full").not())
         .stdout(predicate::str::contains("Force full CLI output").not());
 }

@@ -87,7 +87,15 @@ pub enum Commands {
     /// Remove a task
     Rm(RmArgs),
     /// Output task workflow context for AI agents
-    Prime,
+    Prime(PrimeArgs),
+}
+
+#[derive(Args)]
+#[command(about = "Output task workflow context for AI agents")]
+pub struct PrimeArgs {
+    /// Output only the prelude and skip the command reference
+    #[arg(long = "prelude", display_order = 1)]
+    pub prelude: bool,
 }
 
 #[derive(Parser)]
