@@ -74,8 +74,14 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
     }
 
     let metadata = match &args.metadata {
-        Some(json_str) => match serde_json::from_str(json_str) {
-            Ok(v) => v,
+        Some(json_str) => match serde_json::from_str::<serde_json::Value>(json_str) {
+            Ok(v) => {
+                if !v.is_object() {
+                    eprintln!("Error: --metadata must be a JSON object");
+                    return Ok(1);
+                }
+                v
+            }
             Err(e) => {
                 eprintln!("Error: Invalid JSON for metadata: {}", e);
                 return Ok(1);

@@ -295,6 +295,18 @@ fn test_add_invalid_metadata_fails() {
         .stderr(predicate::str::contains("Invalid JSON for metadata"));
 }
 
+#[test]
+fn test_add_non_object_metadata_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "x", "--metadata", "[1,2,3]"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--metadata must be a JSON object"));
+}
+
 // ── List Command ────────────────────────────────────────────────────────────
 
 #[test]
@@ -960,6 +972,26 @@ fn test_edit_merge_metadata_array_replace_and_null() {
 
     assert_eq!(json["metadata"]["labels"], serde_json::json!(["urgent"]));
     assert!(json["metadata"]["pi_tasks"]["due"].is_null());
+}
+
+#[test]
+fn test_edit_set_metadata_invalid_non_object_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-metadata", "[]"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--set-metadata must be a JSON object",
+        ));
 }
 
 #[test]

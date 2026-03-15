@@ -85,6 +85,10 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     if let Some(ref json_str) = args.set_metadata {
         match serde_json::from_str::<serde_json::Value>(json_str) {
             Ok(v) => {
+                if !v.is_object() {
+                    eprintln!("Error: --set-metadata must be a JSON object");
+                    return Ok(1);
+                }
                 attrs.metadata = Some(v);
                 has_changes = true;
             }
