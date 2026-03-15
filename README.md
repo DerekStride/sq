@@ -44,7 +44,7 @@ claude plugin install sq
 > [!NOTE]
 > There's no queue! See the [FAQ](#faq) section to see the origin of the name.
 
-By default, `sq` uses `.sift/issues.jsonl`. You can override it with:
+By default, `sq` discovers the nearest existing `.sift/issues.jsonl` within the current git worktree and otherwise falls back to `<worktree-root>/.sift/issues.jsonl`. Outside git repositories, it falls back to `.sift/issues.jsonl` in the current directory. You can override it with:
 
 - `-q, --queue <PATH>`
 - `SQ_QUEUE_PATH=<PATH>`

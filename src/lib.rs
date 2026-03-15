@@ -41,7 +41,7 @@ pub fn build_cli() -> Command {
     let header = styles.get_header();
     let literal = styles.get_literal();
     let root_help = StyledStr::from(format!(
-        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}"
+        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} discovers the nearest existing {literal}.sift/issues.jsonl{literal:#} within the current git worktree and otherwise falls back to {literal}<worktree-root>/.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}"
     ));
     cmd = cmd.after_help(root_help);
 
