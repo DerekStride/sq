@@ -169,7 +169,13 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
             sources.push(source_value("directory", Some(path.as_str()), None));
         }
 
-        if sources.is_empty() {
+        let retains_task_content = !sources.is_empty()
+            || args.set_title.is_some()
+            || args.set_description.is_some()
+            || item.title.is_some()
+            || item.description.is_some();
+
+        if !retains_task_content {
             eprintln!("Error: Cannot remove all sources");
             return Ok(1);
         }

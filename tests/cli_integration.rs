@@ -1190,6 +1190,31 @@ fn test_edit_cannot_remove_all_sources() {
 }
 
 #[test]
+fn test_edit_can_remove_last_source_when_title_remains() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "keep me", "--text", "only source"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--rm-source", "0"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["title"], "keep me");
+    assert!(json["sources"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn test_edit_no_changes_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
