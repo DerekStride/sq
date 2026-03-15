@@ -1,5 +1,5 @@
 use crate::cli::formatters;
-use crate::queue::{parse_priority_value, Item, Queue};
+use crate::queue::{parse_priority_value, Item, Queue, VALID_STATUSES};
 use crate::ListArgs;
 use anyhow::Result;
 use std::collections::HashSet;
@@ -10,6 +10,17 @@ use std::process::{Command, Stdio};
 /// Execute the `sq list` command.
 pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     let queue = Queue::new(queue_path);
+
+    if let Some(status) = args.status.as_deref() {
+        if !VALID_STATUSES.contains(&status) {
+            eprintln!(
+                "Error: Invalid status: {}. Valid: {}",
+                status,
+                VALID_STATUSES.join(", ")
+            );
+            return Ok(1);
+        }
+    }
 
     let mut items: Vec<Item> = if args.ready {
         queue.ready()

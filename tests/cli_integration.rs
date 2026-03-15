@@ -543,6 +543,25 @@ fn test_list_status_filter() {
 }
 
 #[test]
+fn test_list_invalid_status_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "item1"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "list", "--status", "bogus_status"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Invalid status: bogus_status. Valid: pending, in_progress, closed",
+        ));
+}
+
+#[test]
 fn test_list_ready() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
