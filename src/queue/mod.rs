@@ -291,6 +291,7 @@ impl Queue {
                 item.blocked_by = blocked_by;
             }
             if let Some(sources) = attrs.sources {
+                self.validate_source_types(&sources)?;
                 item.sources = sources;
             }
 

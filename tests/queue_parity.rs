@@ -627,6 +627,45 @@ fn test_update_invalid_status() {
 }
 
 #[test]
+fn test_update_invalid_source_type() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let result = queue.update(
+        &item.id,
+        UpdateAttrs {
+            sources: Some(vec![Source {
+                type_: "bogus".to_string(),
+                path: None,
+                content: Some("updated".to_string()),
+            }]),
+            ..Default::default()
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid source type"));
+}
+
+#[test]
 fn test_update_nonexistent() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
