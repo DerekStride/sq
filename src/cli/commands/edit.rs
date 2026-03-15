@@ -143,9 +143,10 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         let mut sources: Vec<serde_json::Value> =
             item.sources.iter().map(|s| s.to_json_value()).collect();
 
-        // Remove sources (sort indices in reverse to preserve correctness)
+        // Remove sources (deduplicate, then sort indices in reverse to preserve correctness)
         let mut rm_indices: Vec<usize> = args.rm_source.clone();
-        rm_indices.sort();
+        rm_indices.sort_unstable();
+        rm_indices.dedup();
         rm_indices.reverse();
         for index in rm_indices {
             if index < sources.len() {

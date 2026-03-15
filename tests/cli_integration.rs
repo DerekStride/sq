@@ -1089,6 +1089,52 @@ fn test_edit_add_and_rm_source() {
 }
 
 #[test]
+fn test_edit_deduplicates_duplicate_rm_source_indices() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "a",
+            "--text",
+            "b",
+            "--text",
+            "c",
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--rm-source",
+            "0",
+            "--rm-source",
+            "0",
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let sources = json["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 2);
+    assert_eq!(sources[0]["content"], "b");
+    assert_eq!(sources[1]["content"], "c");
+}
+
+#[test]
 fn test_edit_cannot_remove_all_sources() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
