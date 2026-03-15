@@ -1,13 +1,14 @@
 use anyhow::Result;
+use crate::PrimeArgs;
 
 /// Execute the `sq prime` command.
-pub fn execute() -> Result<i32> {
-    println!("{}", generate());
+pub fn execute(args: &PrimeArgs) -> Result<i32> {
+    println!("{}", generate(args.prelude));
     Ok(0)
 }
 
 /// Generate the prime context string.
-pub fn generate() -> String {
+pub fn generate(prelude_only: bool) -> String {
     let mut parts = Vec::new();
 
     parts.push(
@@ -64,20 +65,20 @@ Combine `priority` with `blocked_by` so ready items form a practical next-work q
 
 User instruction overrides queue order. If the user asks for a specific task, do that task even when other tasks have higher priority.
 
-Do not treat lower-priority tasks as ignorable; they are just not the default next task.
-
-## `sq` Commands"#
+Do not treat lower-priority tasks as ignorable; they are just not the default next task."#
             .to_string(),
     );
 
-    parts.push(generate_command_reference());
+    if !prelude_only {
+        parts.push(generate_command_reference());
+    }
 
     parts.join("\n\n")
 }
 
 fn generate_command_reference() -> String {
     let cmd = crate::build_cli();
-    let mut lines = Vec::new();
+    let mut lines = vec!["## `sq` Commands".to_string(), String::new()];
 
     for sub in cmd.get_subcommands() {
         let name = sub.get_name();

@@ -1635,12 +1635,26 @@ fn test_prime_output() {
 }
 
 #[test]
-fn test_prime_help_has_no_full_flag() {
+fn test_prime_prelude_skips_command_reference() {
+    sq_cmd()
+        .args(["prime", "--prelude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("## Priority"))
+        .stdout(predicate::str::contains("## `sq` Commands").not())
+        .stdout(predicate::str::contains("### `sq add` — Add a new task").not())
+        .stdout(predicate::str::contains("### `sq collect` — Collect tasks from stdin").not());
+}
+
+#[test]
+fn test_prime_help_has_prelude_flag_and_no_full_flag() {
     sq_cmd()
         .args(["prime", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Output task workflow context for AI agents"))
+        .stdout(predicate::str::contains("--prelude"))
+        .stdout(predicate::str::contains("Output only the prelude and skip the command reference"))
         .stdout(predicate::str::contains("--full").not())
         .stdout(predicate::str::contains("Force full CLI output").not());
 }
