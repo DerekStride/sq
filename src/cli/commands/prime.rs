@@ -48,10 +48,10 @@ When choosing the next task to start, prefer `sq list --ready`.
 Blocker management examples:
 
 ```bash
-sq add --title "Implement feature" --blocked-by abc123
-sq edit xyz789 --set-blocked-by abc123,def456
-sq edit xyz789 --set-blocked-by ""
-sq show xyz789
+sq add --title "Implement feature" --blocked-by abc
+sq edit xyz --set-blocked-by abc,def
+sq edit xyz --set-blocked-by ""
+sq show xyz
 ```
 
 ## Priority

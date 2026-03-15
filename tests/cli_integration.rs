@@ -1879,7 +1879,10 @@ fn test_prime_output() {
         .stdout(predicate::str::contains(
             "When choosing the next task to start, prefer `sq list --ready`.",
         ))
-        .stdout(predicate::str::contains("sq edit xyz789 --set-blocked-by abc123,def456"))
+        .stdout(predicate::str::contains("sq add --title \"Implement feature\" --blocked-by abc"))
+        .stdout(predicate::str::contains("sq edit xyz --set-blocked-by abc,def"))
+        .stdout(predicate::str::contains("sq edit xyz --set-blocked-by \"\""))
+        .stdout(predicate::str::contains("sq show xyz"))
         .stdout(predicate::str::contains("## Priority"))
         .stdout(predicate::str::contains(
             "Priority uses the inclusive range `0..4`, where `0` is highest.",
