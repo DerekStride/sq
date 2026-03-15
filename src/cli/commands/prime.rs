@@ -35,7 +35,7 @@ sq list --ready
 
 ## Readiness and dependencies
 
-Dependencies are modeled with `blocked_by`: an item is ready when it is `pending` and none of its blocker IDs refer to another open `pending` item.
+Dependencies are modeled with `blocked_by`: an item is ready when it is `pending` and none of its blocker IDs refer to another non-closed item.
 
 Use these list views intentionally:
 

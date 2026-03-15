@@ -473,6 +473,55 @@ fn test_ready_items() {
 }
 
 #[test]
+fn test_ready_in_progress_blocker_blocks_readiness() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let blocker = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocker".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let _blocked = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocked".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![blocker.id.clone()],
+        )
+        .unwrap();
+
+    queue
+        .update(
+            &blocker.id,
+            UpdateAttrs {
+                status: Some("in_progress".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let ready = queue.ready();
+    assert!(ready.is_empty());
+}
+
+#[test]
 fn test_ready_unblocks_after_close() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);

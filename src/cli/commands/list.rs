@@ -88,13 +88,14 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     } else if items.is_empty() {
         eprintln!("No items found");
     } else {
-        let pending_ids: HashSet<String> = queue
-            .filter(Some("pending"))
-            .iter()
+        let open_ids: HashSet<String> = queue
+            .all()
+            .into_iter()
+            .filter(|i| i.status != "closed")
             .map(|i| i.id.clone())
             .collect();
         for item in &items {
-            formatters::print_item_summary(item, Some(&pending_ids));
+            formatters::print_item_summary(item, Some(&open_ids));
         }
         eprintln!("{} item(s)", items.len());
     }

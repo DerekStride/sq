@@ -609,6 +609,43 @@ fn test_list_ready() {
     assert_eq!(json[0]["id"], blocker_id);
 }
 
+#[test]
+fn test_list_ready_treats_in_progress_blockers_as_blocking() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+        ])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &blocker_id, "--set-status", "in_progress"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--ready", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(json.as_array().unwrap().is_empty());
+}
+
 // ── Show Command ────────────────────────────────────────────────────────────
 
 #[test]

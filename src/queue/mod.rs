@@ -78,14 +78,14 @@ impl Item {
         !self.blocked_by.is_empty()
     }
 
-    pub fn ready(&self, pending_ids: Option<&HashSet<String>>) -> bool {
+    pub fn ready(&self, open_ids: Option<&HashSet<String>>) -> bool {
         if !self.pending() {
             return false;
         }
         if !self.blocked() {
             return true;
         }
-        match pending_ids {
+        match open_ids {
             None => true,
             Some(ids) => self.blocked_by.iter().all(|id| !ids.contains(id)),
         }
@@ -236,17 +236,17 @@ impl Queue {
         }
     }
 
-    /// Return pending items that are not blocked by any pending item.
+    /// Return pending items that are not blocked by any non-closed item.
     pub fn ready(&self) -> Vec<Item> {
         let items = self.all();
-        let pending_ids: HashSet<String> = items
+        let open_ids: HashSet<String> = items
             .iter()
-            .filter(|i| i.pending())
+            .filter(|i| i.status != "closed")
             .map(|i| i.id.clone())
             .collect();
         items
             .into_iter()
-            .filter(|item| item.ready(Some(&pending_ids)))
+            .filter(|item| item.ready(Some(&open_ids)))
             .collect()
     }
 
