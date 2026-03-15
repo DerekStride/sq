@@ -13,9 +13,9 @@ pub fn generate() -> String {
     parts.push(
         r#"# sq — Lightweight task-list CLI with structured sources
 
-`sq` manages tasks in a JSONL file for agent workflows.
+Use `sq` to manage tasks in a JSONL file during agent workflows.
 
-By default, `sq` stores tasks in `.sift/issues.jsonl`. Override with `-q, --queue <PATH>` or `SQ_QUEUE_PATH=<PATH>`.
+Default queue path: `.sift/issues.jsonl`. Override it with `-q, --queue <PATH>` or `SQ_QUEUE_PATH=<PATH>`.
 
 ## Examples
 
@@ -35,17 +35,17 @@ sq list --ready
 
 ## Readiness and dependencies
 
-Dependencies are modeled with `blocked_by`: an item is ready when it is `pending` and none of its blocker IDs refer to another open `pending` item.
+Use `blocked_by` to model dependencies. A task is ready when it is `pending` and none of its blocker IDs refer to another open `pending` task.
 
-Use these list views intentionally:
+Use these list views:
 
 - `sq list --ready` — actionable work only (`pending` and unblocked)
 - `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work stay visible
 - `sq list --all` — include closed items for history/auditing
 
-When choosing the next task to start, prefer `sq list --ready`.
+When you need the next task, start with `sq list --ready`.
 
-Blocker management examples:
+Manage blockers like this:
 
 ```bash
 sq add --title "Implement feature" --blocked-by abc123

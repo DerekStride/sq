@@ -1581,18 +1581,20 @@ fn test_prime_output() {
             "# sq — Lightweight task-list CLI with structured sources",
         ))
         .stdout(predicate::str::contains(
-            "`sq` manages tasks in a JSONL file for agent workflows.",
+            "Use `sq` to manage tasks in a JSONL file during agent workflows.",
         ))
-        .stdout(predicate::str::contains(".sift/issues.jsonl"))
+        .stdout(predicate::str::contains("Default queue path: `.sift/issues.jsonl`."))
         .stdout(predicate::str::contains("## Examples"))
         .stdout(predicate::str::contains("sq list --ready"))
         .stdout(predicate::str::contains("## Readiness and dependencies"))
-        .stdout(predicate::str::contains("Dependencies are modeled with `blocked_by`"))
+        .stdout(predicate::str::contains(
+            "Use `blocked_by` to model dependencies.",
+        ))
         .stdout(predicate::str::contains(
             "- `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work stay visible",
         ))
         .stdout(predicate::str::contains(
-            "When choosing the next task to start, prefer `sq list --ready`.",
+            "When you need the next task, start with `sq list --ready`.",
         ))
         .stdout(predicate::str::contains("sq edit xyz789 --set-blocked-by abc123,def456"))
         .stdout(predicate::str::contains("## Priority"))
