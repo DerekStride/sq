@@ -72,12 +72,12 @@ fn test_source_serialization() {
 
 #[test]
 fn test_unknown_source_type_serialization() {
-    let json = r#"{"type":"transcript","path":"/session.jsonl"}"#;
+    let json = r#"{"type":"unknown","path":"/tmp/source"}"#;
     let source: Source = serde_json::from_str(json).unwrap();
-    assert_eq!(source.type_, "transcript");
+    assert_eq!(source.type_, "unknown");
     let serialized = source.to_json_value();
-    assert_eq!(serialized["type"], "transcript");
-    assert_eq!(serialized["path"], "/session.jsonl");
+    assert_eq!(serialized["type"], "unknown");
+    assert_eq!(serialized["path"], "/tmp/source");
 }
 
 #[test]

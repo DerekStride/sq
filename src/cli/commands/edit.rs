@@ -134,8 +134,7 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     let has_source_adds = !args.add_diff.is_empty()
         || !args.add_file.is_empty()
         || !args.add_text.is_empty()
-        || !args.add_directory.is_empty()
-        || !args.add_transcript.is_empty();
+        || !args.add_directory.is_empty();
     let has_source_removes = !args.rm_source.is_empty();
 
     if has_source_adds || has_source_removes {
@@ -168,9 +167,6 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         }
         for path in &args.add_directory {
             sources.push(source_value("directory", Some(path.as_str()), None));
-        }
-        for path in &args.add_transcript {
-            sources.push(source_value("transcript", Some(path.as_str()), None));
         }
 
         if sources.is_empty() {

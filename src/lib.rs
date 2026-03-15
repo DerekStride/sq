@@ -263,28 +263,24 @@ pub struct EditArgs {
     #[arg(long = "add-directory", value_name = "PATH", display_order = 13)]
     pub add_directory: Vec<String>,
 
-    /// Add transcript source
-    #[arg(long = "add-transcript", value_name = "PATH", display_order = 14)]
-    pub add_transcript: Vec<String>,
-
     /// Remove source by index (0-based, repeatable)
-    #[arg(long = "rm-source", value_name = "INDEX", display_order = 15)]
+    #[arg(long = "rm-source", value_name = "INDEX", display_order = 14)]
     pub rm_source: Vec<usize>,
 
     /// Set metadata as JSON (replaces full metadata object)
-    #[arg(long = "set-metadata", value_name = "JSON", display_order = 16)]
+    #[arg(long = "set-metadata", value_name = "JSON", display_order = 15)]
     pub set_metadata: Option<String>,
 
     /// Merge metadata object as JSON (deep object merge)
-    #[arg(long = "merge-metadata", value_name = "JSON", display_order = 17)]
+    #[arg(long = "merge-metadata", value_name = "JSON", display_order = 16)]
     pub merge_metadata: Option<String>,
 
     /// Set blocker IDs (comma-separated, empty to clear)
-    #[arg(long = "set-blocked-by", value_name = "IDS", display_order = 18)]
+    #[arg(long = "set-blocked-by", value_name = "IDS", display_order = 17)]
     pub set_blocked_by: Option<String>,
 
     /// Output as JSON
-    #[arg(long = "json", display_order = 19)]
+    #[arg(long = "json", display_order = 18)]
     pub json: bool,
 }
 
