@@ -58,6 +58,14 @@ sq show xyz789
 
 Priority uses the inclusive range `0..4`, where `0` is highest.
 
+Use priority to order ready work. Do not treat it as a measure of overall importance.
+
+Combine `priority` with `blocked_by` so ready items form a practical next-work queue.
+
+User instruction overrides queue order. If the user asks for a specific task, do that task even when other tasks have higher priority.
+
+Do not treat lower-priority tasks as ignorable; they are just not the default next task.
+
 ## `sq` Commands"#
             .to_string(),
     );

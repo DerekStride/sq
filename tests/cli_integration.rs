@@ -1601,6 +1601,21 @@ fn test_prime_output() {
         .stdout(predicate::str::contains(
             "Priority uses the inclusive range `0..4`, where `0` is highest.",
         ))
+        .stdout(predicate::str::contains(
+            "Use priority to order ready work. Do not treat it as a measure of overall importance.",
+        ))
+        .stdout(predicate::str::contains(
+            "Combine `priority` with `blocked_by` so ready items form a practical next-work queue.",
+        ))
+        .stdout(predicate::str::contains(
+            "User instruction overrides queue order.",
+        ))
+        .stdout(predicate::str::contains(
+            "If the user asks for a specific task, do that task even when other tasks have higher priority.",
+        ))
+        .stdout(predicate::str::contains(
+            "Do not treat lower-priority tasks as ignorable; they are just not the default next task.",
+        ))
         .stdout(predicate::str::contains("## `sq` Commands"))
         .stdout(predicate::str::contains("### `sq add` — Add a new task"))
         .stdout(predicate::str::contains(
