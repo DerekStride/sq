@@ -288,6 +288,7 @@ impl Queue {
                 item.metadata = metadata;
             }
             if let Some(blocked_by) = attrs.blocked_by {
+                validate_blocked_by(id, &blocked_by)?;
                 item.blocked_by = blocked_by;
             }
             if let Some(sources) = attrs.sources {
@@ -459,6 +460,13 @@ fn validate_priority(priority: u8) -> Result<()> {
     } else {
         anyhow::bail!("Invalid priority: {}. Valid: 0-4", priority);
     }
+}
+
+fn validate_blocked_by(item_id: &str, blocked_by: &[String]) -> Result<()> {
+    if blocked_by.iter().any(|blocker_id| blocker_id == item_id) {
+        anyhow::bail!("Item cannot block itself: {}", item_id);
+    }
+    Ok(())
 }
 
 /// Attributes for updating an item.

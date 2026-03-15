@@ -1232,6 +1232,24 @@ fn test_edit_set_blocked_by() {
 }
 
 #[test]
+fn test_edit_rejects_self_blocked_item() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-blocked-by", &id])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot block itself"));
+}
+
+#[test]
 fn test_edit_clear_blocked_by() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);

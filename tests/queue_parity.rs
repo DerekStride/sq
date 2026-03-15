@@ -715,6 +715,41 @@ fn test_update_invalid_source_type() {
 }
 
 #[test]
+fn test_update_rejects_self_blocked_item() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let result = queue.update(
+        &item.id,
+        UpdateAttrs {
+            blocked_by: Some(vec![item.id.clone()]),
+            ..Default::default()
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("cannot block itself"));
+}
+
+#[test]
 fn test_update_nonexistent() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
