@@ -149,19 +149,6 @@ impl Queue {
         &self,
         sources: Vec<Source>,
         title: Option<String>,
-        priority: Option<u8>,
-        metadata: serde_json::Value,
-        blocked_by: Vec<String>,
-    ) -> Result<Item> {
-        self.validate_sources(&sources)?;
-        self.push_with_description(sources, title, None, priority, metadata, blocked_by)
-    }
-
-    /// Add a new item to the queue with description support.
-    pub fn push_with_description(
-        &self,
-        sources: Vec<Source>,
-        title: Option<String>,
         description: Option<String>,
         priority: Option<u8>,
         metadata: serde_json::Value,
@@ -332,13 +319,6 @@ impl Queue {
     }
 
     // ── Private helpers ─────────────────────────────────────────────────
-
-    fn validate_sources(&self, sources: &[Source]) -> Result<()> {
-        if sources.is_empty() {
-            anyhow::bail!("Sources cannot be empty");
-        }
-        self.validate_source_types(sources)
-    }
 
     fn validate_new_item(&self, item: &NewItem) -> Result<()> {
         if let Some(priority) = item.priority {
