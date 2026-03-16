@@ -651,15 +651,7 @@ fn test_show_human_readable_with_priority() {
     let qp = queue_path(&dir);
 
     let output = sq_cmd()
-        .args([
-            "-q",
-            &qp,
-            "add",
-            "--title",
-            "My Item",
-            "--priority",
-            "2",
-        ])
+        .args(["-q", &qp, "add", "--title", "My Item", "--priority", "2"])
         .output()
         .unwrap();
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
@@ -1623,7 +1615,9 @@ fn test_prime_help_has_no_full_flag() {
         .args(["prime", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Output task workflow context for AI agents"))
+        .stdout(predicate::str::contains(
+            "Output task workflow context for AI agents",
+        ))
         .stdout(predicate::str::contains("--full").not())
         .stdout(predicate::str::contains("Force full CLI output").not());
 }

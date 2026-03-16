@@ -29,14 +29,17 @@ pub struct Cli {
 }
 
 pub fn build_cli() -> Command {
-    let mut cmd = Cli::command().propagate_version(true).disable_version_flag(true).arg(
-        Arg::new("version")
-            .short('v')
-            .long("version")
-            .help("Print version")
-            .action(ArgAction::Version)
-            .global(true),
-    );
+    let mut cmd = Cli::command()
+        .propagate_version(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("version")
+                .short('v')
+                .long("version")
+                .help("Print version")
+                .action(ArgAction::Version)
+                .global(true),
+        );
     let styles = cmd.get_styles();
     let header = styles.get_header();
     let literal = styles.get_literal();
@@ -307,4 +310,3 @@ pub struct RmArgs {
     #[arg(long = "json")]
     pub json: bool,
 }
-
