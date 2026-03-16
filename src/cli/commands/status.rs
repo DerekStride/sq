@@ -9,7 +9,10 @@ pub fn close_after_help(styles: &Styles) -> StyledStr {
     HelpDoc::new()
         .section(
             HelpSection::new("Behavior:")
-                .item("sq close <id>", "Keep an item in history with status closed")
+                .item(
+                    "sq close <id>",
+                    "Keep an item in history with status closed",
+                )
                 .item(
                     "sq close <id> --json",
                     "Return the updated item payload as JSON",
