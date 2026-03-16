@@ -982,4 +982,8 @@ fn test_fixture_items_parse() {
     assert_eq!(items[0].id, "abc");
     assert_eq!(items[1].id, "x1y");
     assert_eq!(items[2].id, "z99");
+
+    let full_item = &items[1];
+    assert_eq!(full_item.priority, Some(1));
+    assert_eq!(full_item.metadata, serde_json::json!({"workflow":"analyze"}));
 }
