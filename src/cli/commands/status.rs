@@ -38,17 +38,21 @@ pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i
         ..Default::default()
     };
 
-    let updated = queue
-        .update(id, attrs)?
-        .expect("item should exist after successful pre-check");
+    match queue.update(id, attrs)? {
+        Some(updated) => {
+            if args.json {
+                let json = serde_json::to_string_pretty(&updated.to_json_value())?;
+                println!("{}", json);
+            } else {
+                println!("{}", updated.id);
+                eprintln!("Updated item {}", updated.id);
+            }
 
-    if args.json {
-        let json = serde_json::to_string_pretty(&updated.to_json_value())?;
-        println!("{}", json);
-    } else {
-        println!("{}", updated.id);
-        eprintln!("Updated item {}", updated.id);
+            Ok(0)
+        }
+        None => {
+            eprintln!("Error: Item not found: {}", id);
+            Ok(1)
+        }
     }
-
-    Ok(0)
 }
