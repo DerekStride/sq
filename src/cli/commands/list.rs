@@ -27,7 +27,7 @@ pub fn after_help(styles: &Styles) -> StyledStr {
             HelpSection::new("Filters:")
                 .item(
                     "--status <STATUS>",
-                    "Restrict to one visible state (pending|blocked|in_progress|closed)",
+                    "Restrict to visible states; repeat to include multiple (pending|blocked|in_progress|closed)",
                 )
                 .item(
                     "--priority <PRIORITY>",
@@ -64,8 +64,8 @@ pub fn after_help(styles: &Styles) -> StyledStr {
 pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     let queue = Queue::new(queue_path);
 
-    if let Some(status) = args.status.as_deref() {
-        if !VALID_DISPLAY_STATUSES.contains(&status) {
+    for status in &args.status {
+        if !VALID_DISPLAY_STATUSES.contains(&status.as_str()) {
             eprintln!(
                 "Error: Invalid status: {}. Valid: {}",
                 status,
@@ -77,7 +77,7 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
 
     let mut items: Vec<Item> = if args.ready {
         queue.items_with_computed_status(queue.ready())
-    } else if args.all || args.status.is_some() {
+    } else if args.all || !args.status.is_empty() {
         queue.all_with_computed_status()
     } else {
         queue
@@ -87,8 +87,10 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
             .collect()
     };
 
-    if let Some(status) = args.status.as_deref() {
-        items.retain(|item| item.status == status);
+    if !args.status.is_empty() {
+        let requested_statuses: HashSet<&str> =
+            args.status.iter().map(|status| status.as_str()).collect();
+        items.retain(|item| requested_statuses.contains(item.status.as_str()));
     }
 
     if !args.priority.is_empty() {

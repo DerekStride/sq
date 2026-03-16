@@ -586,6 +586,76 @@ fn test_list_status_filter() {
 }
 
 #[test]
+fn test_list_filters_by_repeatable_status_flag() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "pending"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "in progress"])
+        .output()
+        .unwrap();
+    let in_progress_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "closed"])
+        .output()
+        .unwrap();
+    let closed_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &in_progress_id, "--set-status", "in_progress"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &closed_id, "--set-status", "closed"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "list",
+            "--status",
+            "pending",
+            "--status",
+            "in_progress",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+
+    let statuses_by_title: std::collections::HashMap<String, String> = items
+        .iter()
+        .map(|item| {
+            (
+                item["title"].as_str().unwrap().to_string(),
+                item["status"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+
+    assert_eq!(statuses_by_title.get("pending").map(String::as_str), Some("pending"));
+    assert_eq!(
+        statuses_by_title
+            .get("in progress")
+            .map(String::as_str),
+        Some("in_progress")
+    );
+}
+
+#[test]
 fn test_list_invalid_status_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -2269,7 +2339,9 @@ fn test_list_help_documents_footer_sections() {
     assert!(stdout.contains(
         "Default view: show all non-closed items so blocked dependencies and in_progress work remain visible",
     ));
-    assert!(stdout.contains("Restrict to one visible state (pending|blocked|in_progress|closed)",));
+    assert!(stdout.contains(
+        "Restrict to visible states; repeat to include multiple (pending|blocked|in_progress|closed)",
+    ));
     assert!(stdout.contains("Repeat to include multiple priorities"));
     assert!(stdout.contains("Apply a jq select expression after built-in filtering"));
     assert!(stdout.contains("--blocked-by <id1,id2>"));
