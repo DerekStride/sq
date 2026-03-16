@@ -830,6 +830,69 @@ fn test_edit_set_and_clear_priority() {
 }
 
 #[test]
+fn test_edit_noop_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--title",
+            "test",
+            "--description",
+            "desc",
+            "--priority",
+            "1",
+            "--metadata",
+            r#"{"kind":"task"}"#,
+            "--blocked-by",
+            "abc",
+            "--text",
+            "content",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let before: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let id = before["id"].as_str().unwrap().to_string();
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--set-status",
+            "pending",
+            "--set-title",
+            "test",
+            "--set-description",
+            "desc",
+            "--set-priority",
+            "1",
+            "--set-metadata",
+            r#"{"kind":"task"}"#,
+            "--set-blocked-by",
+            "abc",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let after: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(after["updated_at"], before["updated_at"]);
+}
+
+#[test]
 fn test_edit_invalid_priority_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);

@@ -646,6 +646,43 @@ fn test_update_can_clear_priority() {
 }
 
 #[test]
+fn test_update_noop_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![],
+            Some("Test".to_string()),
+            Some("Description".to_string()),
+            Some(1),
+            serde_json::json!({"kind":"task"}),
+            vec!["abc".to_string()],
+        )
+        .unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    let updated = queue
+        .update(
+            &item.id,
+            UpdateAttrs {
+                status: Some(item.status.clone()),
+                title: item.title.clone(),
+                description: item.description.clone(),
+                priority: Some(item.priority),
+                metadata: Some(item.metadata.clone()),
+                blocked_by: Some(item.blocked_by.clone()),
+                sources: Some(item.sources.clone()),
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(updated.updated_at, item.updated_at);
+}
+
+#[test]
 fn test_update_invalid_status() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);

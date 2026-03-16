@@ -260,6 +260,7 @@ impl Queue {
                 None => return Ok(None),
             };
 
+            let original = items[index].clone();
             let item = &mut items[index];
 
             if let Some(status) = &attrs.status {
@@ -294,6 +295,10 @@ impl Queue {
             if let Some(sources) = attrs.sources {
                 self.validate_source_types(&sources)?;
                 item.sources = sources;
+            }
+
+            if *item == original {
+                return Ok(Some(original));
             }
 
             item.updated_at = now_iso8601();
