@@ -262,14 +262,7 @@ fn test_push_with_priority_only_requires_task_content() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
-    let result = queue.push(
-        vec![],
-        None,
-        None,
-        Some(1),
-        serde_json::json!({}),
-        vec![],
-    );
+    let result = queue.push(vec![], None, None, Some(1), serde_json::json!({}), vec![]);
 
     assert!(result.is_err());
     assert!(result
@@ -1022,5 +1015,8 @@ fn test_fixture_items_parse() {
 
     let full_item = &items[1];
     assert_eq!(full_item.priority, Some(1));
-    assert_eq!(full_item.metadata, serde_json::json!({"workflow":"analyze"}));
+    assert_eq!(
+        full_item.metadata,
+        serde_json::json!({"workflow":"analyze"})
+    );
 }

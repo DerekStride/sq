@@ -634,7 +634,14 @@ fn test_list_ready_treats_in_progress_blockers_as_blocking() {
         .success();
 
     sq_cmd()
-        .args(["-q", &qp, "edit", &blocker_id, "--set-status", "in_progress"])
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &blocker_id,
+            "--set-status",
+            "in_progress",
+        ])
         .assert()
         .success();
 
@@ -1187,15 +1194,7 @@ fn test_edit_deduplicates_duplicate_rm_source_indices() {
 
     let output = sq_cmd()
         .args([
-            "-q",
-            &qp,
-            "add",
-            "--text",
-            "a",
-            "--text",
-            "b",
-            "--text",
-            "c",
+            "-q", &qp, "add", "--text", "a", "--text", "b", "--text", "c",
         ])
         .output()
         .unwrap();
@@ -1277,7 +1276,15 @@ fn test_edit_can_remove_last_source_when_title_remains() {
     let qp = queue_path(&dir);
 
     let output = sq_cmd()
-        .args(["-q", &qp, "add", "--title", "keep me", "--text", "only source"])
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--title",
+            "keep me",
+            "--text",
+            "only source",
+        ])
         .output()
         .unwrap();
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
@@ -1446,10 +1453,7 @@ fn test_close_command_already_closed_is_explicit_and_preserves_updated_at() {
         .unwrap();
     let before: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
 
-    let output = sq_cmd()
-        .args(["-q", &qp, "close", &id])
-        .output()
-        .unwrap();
+    let output = sq_cmd().args(["-q", &qp, "close", &id]).output().unwrap();
 
     assert!(output.status.success());
     assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), id);
