@@ -1585,6 +1585,24 @@ fn test_rm_not_found() {
         .stderr(predicate::str::contains("Item not found: zzz"));
 }
 
+#[test]
+fn test_rm_help_documents_behavior_and_safety() {
+    let output = sq_cmd().args(["rm", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(&stdout, &["Behavior:", "Safety:", "Examples:"]);
+
+    assert!(stdout.contains("sq rm <id>"));
+    assert!(stdout.contains("Remove an item from the task file entirely"));
+    assert!(stdout.contains("sq rm <id> --json"));
+    assert!(stdout.contains("Return the removed item payload as JSON"));
+    assert!(stdout.contains("Prefer sq close when you want to preserve history"));
+    assert!(stdout.contains("Use sq rm when an item was created by mistake"));
+    assert!(stdout.contains("sq rm abc"));
+    assert!(stdout.contains("Delete an item and emit the removed record for downstream tooling"));
+}
+
 // ── Collect Command ─────────────────────────────────────────────────────────
 
 #[test]

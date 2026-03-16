@@ -64,6 +64,11 @@ pub fn build_cli() -> Command {
         subcmd.after_help(help)
     });
 
+    cmd = cmd.mut_subcommand("rm", |subcmd| {
+        let help = crate::cli::commands::rm::after_help(subcmd.get_styles());
+        subcmd.after_help(help)
+    });
+
     cmd
 }
 
