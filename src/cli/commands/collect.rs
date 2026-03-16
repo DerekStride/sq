@@ -4,6 +4,7 @@ use crate::queue::{parse_priority_value, NewItem, Queue, Source};
 use crate::CollectArgs;
 use anyhow::Result;
 use clap::builder::{StyledStr, Styles};
+use std::collections::HashSet;
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
@@ -161,7 +162,16 @@ pub fn execute(args: &CollectArgs, queue_path: PathBuf) -> Result<i32> {
     let items = queue.push_many_with_description(new_items)?;
 
     if args.json {
-        let json_values: Vec<serde_json::Value> = items.iter().map(|i| i.to_json_value()).collect();
+        let open_ids: HashSet<String> = queue
+            .all()
+            .into_iter()
+            .filter(|item| item.status != "closed")
+            .map(|item| item.id)
+            .collect();
+        let json_values: Vec<serde_json::Value> = items
+            .iter()
+            .map(|item| item.with_computed_status(Some(&open_ids)).to_json_value())
+            .collect();
         let json = serde_json::to_string_pretty(&json_values)?;
         println!("{}", json);
     } else {

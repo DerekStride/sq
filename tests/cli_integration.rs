@@ -1997,6 +1997,43 @@ fn test_collect_by_file_with_description_priority_metadata_and_blocked_by() {
 }
 
 #[test]
+fn test_collect_by_file_json_surfaces_blocked_status() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "collect",
+            "--by-file",
+            "--description",
+            "Migrate",
+            "--blocked-by",
+            &blocker_id,
+            "--json",
+        ])
+        .write_stdin(rg_json_input())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert!(items.iter().all(|item| item["status"] == "blocked"));
+    assert!(items
+        .iter()
+        .all(|item| item["blocked_by"] == serde_json::json!([blocker_id.clone()])));
+}
+
+#[test]
 fn test_collect_by_file_empty_stdin_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
