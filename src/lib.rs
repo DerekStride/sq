@@ -69,6 +69,11 @@ pub fn build_cli() -> Command {
         subcmd.after_help(help)
     });
 
+    cmd = cmd.mut_subcommand("close", |subcmd| {
+        let help = crate::cli::commands::status::close_after_help(subcmd.get_styles());
+        subcmd.about(None::<&str>).after_help(help)
+    });
+
     cmd
 }
 

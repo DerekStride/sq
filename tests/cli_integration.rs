@@ -1513,6 +1513,23 @@ fn test_close_command_json_already_closed_is_explicit_and_preserves_updated_at()
 }
 
 #[test]
+fn test_close_help_documents_behavior_only() {
+    let output = sq_cmd().args(["close", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(stdout.starts_with("Usage: sq close [OPTIONS] [ID]\n\n"));
+    assert!(stdout.contains("Behavior:"));
+    assert!(stdout.contains("sq close <id>"));
+    assert!(stdout.contains("Keep an item in history with status closed"));
+    assert!(stdout.contains("sq close <id> --json"));
+    assert!(stdout.contains("Return the updated item payload as JSON"));
+    assert!(!stdout.contains("Idempotence:"));
+    assert!(!stdout.contains("Examples:"));
+    assert!(!stdout.contains("Mark a task as closed"));
+}
+
+#[test]
 fn test_status_command_not_found() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
