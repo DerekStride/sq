@@ -3,7 +3,7 @@ pub mod collect;
 pub mod queue;
 pub mod queue_path;
 
-use clap::{builder::StyledStr, Arg, ArgAction, Args, Command, CommandFactory, Parser, Subcommand};
+use clap::{Arg, ArgAction, Args, Command, CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -40,12 +40,7 @@ pub fn build_cli() -> Command {
                 .action(ArgAction::Version)
                 .global(true),
         );
-    let styles = cmd.get_styles();
-    let header = styles.get_header();
-    let literal = styles.get_literal();
-    let root_help = StyledStr::from(format!(
-        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}"
-    ));
+    let root_help = crate::cli::help::root_after_help(cmd.get_styles());
     cmd = cmd.after_help(root_help);
 
     cmd = cmd.mut_subcommand("collect", |subcmd| {
@@ -75,7 +70,7 @@ pub fn build_cli() -> Command {
 
     cmd = cmd.mut_subcommand("close", |subcmd| {
         let help = crate::cli::commands::status::close_after_help(subcmd.get_styles());
-        subcmd.about(None::<&str>).after_help(help)
+        subcmd.long_about("").after_help(help)
     });
 
     cmd

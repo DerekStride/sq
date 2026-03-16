@@ -99,3 +99,25 @@ impl HelpSection {
         self
     }
 }
+
+pub fn root_after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Task file:")
+                .text("By default, sq uses .sift/issues.jsonl.")
+                .text("Override with -q, --queue <PATH> or SQ_QUEUE_PATH=<PATH>."),
+        )
+        .section(
+            HelpSection::new("Workflow:")
+                .item("sq list --ready", "See the next actionable tasks")
+                .item("sq add --title <TITLE>", "Create a new task")
+                .item("sq show <id>", "Inspect one task in detail")
+                .item("sq edit <id> ...", "Update fields, sources, metadata, or blockers"),
+        )
+        .section(
+            HelpSection::new("Command help:")
+                .item("sq <command> --help", "See command-specific guidance and examples")
+                .item("sq prime", "Output workflow context for AI agents"),
+        )
+        .render(styles)
+}

@@ -1518,7 +1518,7 @@ fn test_close_help_documents_behavior_only() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    assert!(stdout.starts_with("Usage: sq close [OPTIONS] [ID]\n\n"));
+    assert!(stdout.contains("Usage: sq close [OPTIONS] [ID]"));
     assert!(stdout.contains("Behavior:"));
     assert!(stdout.contains("sq close <id>"));
     assert!(stdout.contains("Keep an item in history with status closed"));
@@ -1526,7 +1526,7 @@ fn test_close_help_documents_behavior_only() {
     assert!(stdout.contains("Return the updated item payload as JSON"));
     assert!(!stdout.contains("Idempotence:"));
     assert!(!stdout.contains("Examples:"));
-    assert!(!stdout.contains("Mark a task as closed"));
+    assert!(!stdout.starts_with("Mark a task as closed\n\n"));
 }
 
 #[test]
@@ -1821,18 +1821,21 @@ fn test_collect_unsupported_input_fails_atomically() {
 }
 
 #[test]
-fn test_collect_appears_in_main_help() {
-    sq_cmd()
-        .args(["--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "lightweight task-list CLI with structured sources",
-        ))
-        .stdout(predicate::str::contains("collect"))
-        .stdout(predicate::str::contains("Path to task file"))
-        .stdout(predicate::str::contains(".sift/issues.jsonl"))
-        .stdout(predicate::str::contains("Manage Sift's review queue").not());
+fn test_main_help_documents_workflow_sections() {
+    let output = sq_cmd().args(["--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(stdout.contains("lightweight task-list CLI with structured sources"));
+    assert!(stdout.contains("collect"));
+    assert!(stdout.contains("close    Mark a task as closed"));
+    assert_contains_in_order(&stdout, &["Task file:", "Workflow:", "Command help:"]);
+    assert!(stdout.contains("By default, sq uses .sift/issues.jsonl"));
+    assert!(stdout.contains("sq list --ready"));
+    assert!(stdout.contains("sq add --title <TITLE>"));
+    assert!(stdout.contains("sq <command> --help"));
+    assert!(stdout.contains("sq prime"));
+    assert!(!stdout.contains("Manage Sift's review queue"));
 }
 
 #[test]
