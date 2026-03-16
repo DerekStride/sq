@@ -60,13 +60,7 @@ pub fn build_cli() -> Command {
     });
 
     cmd = cmd.mut_subcommand("list", |subcmd| {
-        let styles = subcmd.get_styles();
-        let header = styles.get_header();
-        let literal = styles.get_literal();
-        let help = StyledStr::from(format!(
-            "{header}Views:{header:#}\n  {literal}sq list --ready{literal:#}  Show only actionable work: {literal}pending{literal:#} items with no open blockers\n  {literal}sq list{literal:#}          Default view: show all non-closed items so blocked dependencies and {literal}in_progress{literal:#} work remain visible\n  {literal}sq list --all{literal:#}    Include closed items for history\n\n{header}Dependencies:{header:#}\n  Use {literal}--blocked-by <id1,id2>{literal:#} on {literal}sq add{literal:#} or {literal}sq collect{literal:#} to declare blockers.\n  Use {literal}sq edit <id> --set-blocked-by ...{literal:#} to update blockers later."
-        ));
-
+        let help = crate::cli::commands::list::after_help(subcmd.get_styles());
         subcmd.after_help(help)
     });
 

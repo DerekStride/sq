@@ -1543,22 +1543,28 @@ fn test_list_help_includes_priority_filter_near_other_filters() {
 }
 
 #[test]
-fn test_list_help_documents_views_and_dependencies() {
-    sq_cmd()
-        .args(["list", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Views:"))
-        .stdout(predicate::str::contains("sq list --ready"))
-        .stdout(predicate::str::contains(
-            "Show only actionable work: pending items with no open blockers",
-        ))
-        .stdout(predicate::str::contains(
-            "Default view: show all non-closed items so blocked dependencies and in_progress work remain visible",
-        ))
-        .stdout(predicate::str::contains("Dependencies:"))
-        .stdout(predicate::str::contains("--blocked-by <id1,id2>"))
-        .stdout(predicate::str::contains("sq edit <id> --set-blocked-by ..."));
+fn test_list_help_documents_footer_sections() {
+    let output = sq_cmd().args(["list", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(
+        &stdout,
+        &["Views:", "Filters:", "Dependencies:", "Examples:"],
+    );
+
+    assert!(stdout.contains("sq list --ready"));
+    assert!(stdout.contains("Show only actionable work: pending items with no open blockers"));
+    assert!(stdout.contains(
+        "Default view: show all non-closed items so blocked dependencies and in_progress work remain visible",
+    ));
+    assert!(stdout.contains("Restrict to one lifecycle state"));
+    assert!(stdout.contains("Repeat to include multiple priorities"));
+    assert!(stdout.contains("Apply a jq select expression after built-in filtering"));
+    assert!(stdout.contains("--blocked-by <id1,id2>"));
+    assert!(stdout.contains("sq edit <id> --set-blocked-by ..."));
+    assert!(stdout.contains("sq list --priority 0 --priority 1"));
+    assert!(stdout.contains("sq list --status in_progress --json"));
 }
 
 // ── Prime Command ───────────────────────────────────────────────────────────
