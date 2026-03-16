@@ -64,6 +64,11 @@ fn is_empty_json_vec(v: &[serde_json::Value]) -> bool {
 
 /// Serialize items through serde so the struct definition is the source of
 /// truth for JSON output.
+///
+/// Note: this serializes the item's current `status` field verbatim. Callers
+/// that want display/view semantics (for example, surfacing `blocked` as a
+/// computed status in read-oriented output) must first call
+/// `with_computed_status(...)`.
 impl Item {
     pub fn to_json_value(&self) -> serde_json::Value {
         serde_json::to_value(self).expect("item serialization should succeed")
@@ -81,6 +86,11 @@ impl Item {
         !self.blocked_by.is_empty()
     }
 
+    /// Compute the visible status for read-oriented views.
+    ///
+    /// Persisted lifecycle status remains `pending|in_progress|closed`, but
+    /// pending items with open blockers are surfaced as `blocked` in display
+    /// output.
     pub fn computed_status(&self, open_ids: Option<&HashSet<String>>) -> String {
         if !self.pending() || !self.blocked() {
             return self.status.clone();
@@ -253,7 +263,12 @@ impl Queue {
         self.all().into_iter().find(|item| item.id == id)
     }
 
-    /// Filter items by status (optional).
+    /// Filter items by persisted lifecycle status (optional).
+    ///
+    /// This method intentionally does not apply computed/display status
+    /// semantics. Callers that want view-oriented filtering (for example,
+    /// treating `blocked` as a visible status in list/show output) should load
+    /// items, call `with_computed_status(...)`, and then filter those results.
     pub fn filter(&self, status: Option<&str>) -> Vec<Item> {
         let items = self.all();
         match status {
