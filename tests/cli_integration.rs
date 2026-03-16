@@ -1875,6 +1875,19 @@ fn test_add_help_puts_title_and_description_first() {
 }
 
 #[test]
+fn test_add_help_documents_task_content_only() {
+    let output = sq_cmd().args(["add", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(&stdout, &["Task content:", "Dependencies:"]);
+    assert!(stdout.contains("Provide at least one of --title, --description, or a source"));
+    assert!(stdout.contains("Use --blocked-by <id1,id2> to declare blockers when creating an item"));
+    assert!(!stdout.contains("Sources:"));
+    assert!(!stdout.contains("Examples:"));
+}
+
+#[test]
 fn test_collect_help_puts_title_and_description_first() {
     let output = sq_cmd().args(["collect", "--help"]).output().unwrap();
     assert!(output.status.success());
@@ -1909,6 +1922,21 @@ fn test_edit_help_puts_title_and_description_first() {
             "--add-diff <PATH>",
         ],
     );
+}
+
+#[test]
+fn test_edit_help_documents_metadata_and_dependencies() {
+    let output = sq_cmd().args(["edit", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(&stdout, &["Metadata:", "Dependencies:"]);
+    assert!(stdout.contains("Replace the full metadata object"));
+    assert!(stdout.contains("Deep-merge a metadata patch"));
+    assert!(stdout.contains("Use --set-blocked-by <id1,id2> to replace blocker IDs"));
+    assert!(stdout.contains("Pass an empty string to clear blockers"));
+    assert!(!stdout.contains("Fields:"));
+    assert!(!stdout.contains("Sources:"));
 }
 
 #[test]

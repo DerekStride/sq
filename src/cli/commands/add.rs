@@ -1,8 +1,23 @@
+use crate::cli::help::{HelpDoc, HelpSection};
 use crate::queue::{parse_priority_value, Queue, Source};
 use crate::AddArgs;
 use anyhow::Result;
+use clap::builder::{StyledStr, Styles};
 use std::io::Read;
 use std::path::PathBuf;
+
+pub fn after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Task content:")
+                .text("Provide at least one of --title, --description, or a source."),
+        )
+        .section(
+            HelpSection::new("Dependencies:")
+                .text("Use --blocked-by <id1,id2> to declare blockers when creating an item."),
+        )
+        .render(styles)
+}
 
 /// Execute the `sq add` command.
 pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {

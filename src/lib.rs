@@ -59,6 +59,16 @@ pub fn build_cli() -> Command {
         subcmd.after_help(help)
     });
 
+    cmd = cmd.mut_subcommand("add", |subcmd| {
+        let help = crate::cli::commands::add::after_help(subcmd.get_styles());
+        subcmd.after_help(help)
+    });
+
+    cmd = cmd.mut_subcommand("edit", |subcmd| {
+        let help = crate::cli::commands::edit::after_help(subcmd.get_styles());
+        subcmd.after_help(help)
+    });
+
     cmd = cmd.mut_subcommand("list", |subcmd| {
         let help = crate::cli::commands::list::after_help(subcmd.get_styles());
         subcmd.after_help(help)

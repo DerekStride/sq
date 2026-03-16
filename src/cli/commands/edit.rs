@@ -1,7 +1,24 @@
+use crate::cli::help::{HelpDoc, HelpSection};
 use crate::queue::{parse_priority_value, Queue, Source, UpdateAttrs, VALID_STATUSES};
 use crate::EditArgs;
 use anyhow::Result;
+use clap::builder::{StyledStr, Styles};
 use std::path::PathBuf;
+
+pub fn after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Metadata:")
+                .item("--set-metadata <JSON>", "Replace the full metadata object")
+                .item("--merge-metadata <JSON>", "Deep-merge a metadata patch"),
+        )
+        .section(
+            HelpSection::new("Dependencies:")
+                .text("Use --set-blocked-by <id1,id2> to replace blocker IDs.")
+                .text("Pass an empty string to clear blockers."),
+        )
+        .render(styles)
+}
 
 /// Execute the `sq edit` command.
 pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
