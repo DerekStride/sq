@@ -3,8 +3,8 @@ use std::collections::HashSet;
 
 /// Print a one-line summary for an item (used by `sq list`).
 /// Format: {id}  [{status}]  {title_or_description}  {source_types}  {created_at}
-pub fn print_item_summary(item: &Item, pending_ids: Option<&HashSet<String>>) {
-    let display_status = resolve_display_status(item, pending_ids);
+pub fn print_item_summary(item: &Item, open_ids: Option<&HashSet<String>>) {
+    let display_status = resolve_display_status(item, open_ids);
 
     // Tally source types
     let mut type_counts: Vec<(String, usize)> = Vec::new();
@@ -103,11 +103,11 @@ fn print_source(source: &crate::queue::Source, index: usize) {
 }
 
 /// Determine display status (may show "blocked" for pending+blocked items).
-fn resolve_display_status(item: &Item, pending_ids: Option<&HashSet<String>>) -> String {
+fn resolve_display_status(item: &Item, open_ids: Option<&HashSet<String>>) -> String {
     if !item.pending() || !item.blocked() {
         return item.status.clone();
     }
-    match pending_ids {
+    match open_ids {
         None => "blocked".to_string(),
         Some(ids) => {
             if item.blocked_by.iter().any(|id| ids.contains(id)) {

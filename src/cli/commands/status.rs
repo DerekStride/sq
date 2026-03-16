@@ -14,6 +14,25 @@ pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i
         }
     };
 
+    let existing = match queue.find(id) {
+        Some(item) => item,
+        None => {
+            eprintln!("Error: Item not found: {}", id);
+            return Ok(1);
+        }
+    };
+
+    if existing.status == status {
+        if args.json {
+            let json = serde_json::to_string_pretty(&existing.to_json_value())?;
+            println!("{}", json);
+        } else {
+            println!("{}", existing.id);
+        }
+        eprintln!("Item {} is already {}", existing.id, status);
+        return Ok(0);
+    }
+
     let attrs = UpdateAttrs {
         status: Some(status.to_string()),
         ..Default::default()
@@ -28,6 +47,7 @@ pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i
                 println!("{}", updated.id);
                 eprintln!("Updated item {}", updated.id);
             }
+
             Ok(0)
         }
         None => {

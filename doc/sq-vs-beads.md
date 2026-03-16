@@ -47,7 +47,7 @@ rg --json -n -C2 'OldApi.call' | sq collect --by-file \
   --metadata '{"kind":"migration"}'
 ```
 
-### Zero-dependenies
+### Zero-dependencies
 
 `sq` is a single static binary that reads and writes a JSONL file.
 
