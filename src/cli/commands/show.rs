@@ -16,7 +16,7 @@ pub fn execute(args: &ShowArgs, queue_path: PathBuf) -> Result<i32> {
         }
     };
 
-    let item = match queue.find(id) {
+    let item = match queue.find_with_computed_status(id) {
         Some(item) => item,
         None => {
             eprintln!("Error: Item not found: {}", id);

@@ -1,29 +1,95 @@
 use crate::cli::formatters;
-use crate::queue::{parse_priority_value, Item, Queue};
+use crate::cli::help::{HelpDoc, HelpSection};
+use crate::queue::{parse_priority_value, Item, Queue, VALID_DISPLAY_STATUSES};
 use crate::ListArgs;
 use anyhow::Result;
+use clap::builder::{StyledStr, Styles};
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+pub fn after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Views:")
+                .item(
+                    "sq list --ready",
+                    "Show only actionable work: pending items with no open blockers",
+                )
+                .item(
+                    "sq list",
+                    "Default view: show all non-closed items so blocked dependencies and in_progress work remain visible",
+                )
+                .item("sq list --all", "Include closed items for history"),
+        )
+        .section(
+            HelpSection::new("Filters:")
+                .item(
+                    "--status <STATUS>",
+                    "Restrict to one visible state (pending|blocked|in_progress|closed)",
+                )
+                .item(
+                    "--priority <PRIORITY>",
+                    "Repeat to include multiple priorities",
+                )
+                .item(
+                    "--filter <EXPR>",
+                    "Apply a jq select expression after built-in filtering",
+                )
+                .item("--sort <PATH>", "Sort by a jq path expression")
+                .item("--reverse", "Reverse the selected sort order"),
+        )
+        .section(
+            HelpSection::new("Dependencies:")
+                .text("Use --blocked-by <id1,id2> on sq add or sq collect to declare blockers.")
+                .text("Use sq edit <id> --set-blocked-by ... to update blockers later."),
+        )
+        .section(
+            HelpSection::new("Examples:")
+                .item("sq list --ready", "Focus on the next actionable task")
+                .item(
+                    "sq list --priority 0 --priority 1",
+                    "Review the highest-priority work first",
+                )
+                .item(
+                    "sq list --status in_progress --json",
+                    "Inspect active work in machine-readable form",
+                ),
+        )
+        .render(styles)
+}
+
 /// Execute the `sq list` command.
 pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     let queue = Queue::new(queue_path);
 
+    if let Some(status) = args.status.as_deref() {
+        if !VALID_DISPLAY_STATUSES.contains(&status) {
+            eprintln!(
+                "Error: Invalid status: {}. Valid: {}",
+                status,
+                VALID_DISPLAY_STATUSES.join(", ")
+            );
+            return Ok(1);
+        }
+    }
+
     let mut items: Vec<Item> = if args.ready {
-        queue.ready()
-    } else if let Some(status) = args.status.as_deref() {
-        queue.filter(Some(status))
-    } else if args.all {
-        queue.filter(None)
+        queue.items_with_computed_status(queue.ready())
+    } else if args.all || args.status.is_some() {
+        queue.all_with_computed_status()
     } else {
         queue
-            .all()
+            .all_with_computed_status()
             .into_iter()
             .filter(|item| item.status != "closed")
             .collect()
     };
+
+    if let Some(status) = args.status.as_deref() {
+        items.retain(|item| item.status == status);
+    }
 
     if !args.priority.is_empty() {
         let requested_priorities: HashSet<u8> = args
@@ -77,13 +143,8 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     } else if items.is_empty() {
         eprintln!("No items found");
     } else {
-        let pending_ids: HashSet<String> = queue
-            .filter(Some("pending"))
-            .iter()
-            .map(|i| i.id.clone())
-            .collect();
         for item in &items {
-            formatters::print_item_summary(item, Some(&pending_ids));
+            formatters::print_item_summary(item);
         }
         eprintln!("{} item(s)", items.len());
     }

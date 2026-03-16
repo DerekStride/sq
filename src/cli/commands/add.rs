@@ -1,8 +1,23 @@
+use crate::cli::help::{HelpDoc, HelpSection};
 use crate::queue::{parse_priority_value, Queue, Source};
 use crate::AddArgs;
 use anyhow::Result;
+use clap::builder::{StyledStr, Styles};
 use std::io::Read;
 use std::path::PathBuf;
+
+pub fn after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Task content:")
+                .text("Provide at least one of --title, --description, or a source."),
+        )
+        .section(
+            HelpSection::new("Dependencies:")
+                .text("Use --blocked-by <id1,id2> to declare blockers when creating an item."),
+        )
+        .render(styles)
+}
 
 /// Execute the `sq add` command.
 pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
@@ -74,8 +89,14 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
     }
 
     let metadata = match &args.metadata {
-        Some(json_str) => match serde_json::from_str(json_str) {
-            Ok(v) => v,
+        Some(json_str) => match serde_json::from_str::<serde_json::Value>(json_str) {
+            Ok(v) => {
+                if !v.is_object() {
+                    eprintln!("Error: --metadata must be a JSON object");
+                    return Ok(1);
+                }
+                v
+            }
             Err(e) => {
                 eprintln!("Error: Invalid JSON for metadata: {}", e);
                 return Ok(1);
@@ -93,7 +114,7 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
         None => Vec::new(),
     };
 
-    let item = queue.push_with_description(
+    let item = queue.push(
         sources,
         args.title.clone(),
         args.description.clone(),
@@ -103,6 +124,7 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
     )?;
 
     if args.json {
+        let item = queue.item_with_computed_status(item);
         let json = serde_json::to_string_pretty(&item.to_json_value())?;
         println!("{}", json);
     } else {

@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::PrimeArgs;
+use anyhow::Result;
 
 /// Execute the `sq prime` command.
 pub fn execute(args: &PrimeArgs) -> Result<i32> {
@@ -36,7 +36,7 @@ sq list --ready
 
 ## Readiness and dependencies
 
-Use `blocked_by` to model dependencies. A task is ready when it is `pending` and none of its blocker IDs refer to another open `pending` task.
+Use `blocked_by` to model dependencies. A task is ready when it is `pending` and none of its blocker IDs refer to another non-closed task.
 
 Use these list views:
 
@@ -49,10 +49,10 @@ When you need the next task, start with `sq list --ready`.
 Manage blockers like this:
 
 ```bash
-sq add --title "Implement feature" --blocked-by abc123
-sq edit xyz789 --set-blocked-by abc123,def456
-sq edit xyz789 --set-blocked-by ""
-sq show xyz789
+sq add --title "Implement feature" --blocked-by abc
+sq edit xyz --set-blocked-by abc,def
+sq edit xyz --set-blocked-by ""
+sq show xyz
 ```
 
 ## Priority

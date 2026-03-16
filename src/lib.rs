@@ -3,7 +3,7 @@ pub mod collect;
 pub mod queue;
 pub mod queue_path;
 
-use clap::{builder::StyledStr, Arg, ArgAction, Args, Command, CommandFactory, Parser, Subcommand};
+use clap::{Arg, ArgAction, Args, Command, CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -29,42 +29,48 @@ pub struct Cli {
 }
 
 pub fn build_cli() -> Command {
-    let mut cmd = Cli::command().propagate_version(true).disable_version_flag(true).arg(
-        Arg::new("version")
-            .short('v')
-            .long("version")
-            .help("Print version")
-            .action(ArgAction::Version)
-            .global(true),
-    );
-    let styles = cmd.get_styles();
-    let header = styles.get_header();
-    let literal = styles.get_literal();
-    let root_help = StyledStr::from(format!(
-        "{header}Task file:{header:#}\n  By default, {literal}sq{literal:#} uses {literal}.sift/issues.jsonl{literal:#}\n  Override with {literal}-q, --queue <PATH>{literal:#} or {literal}SQ_QUEUE_PATH=<PATH>{literal:#}"
-    ));
+    let mut cmd = Cli::command()
+        .propagate_version(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new("version")
+                .short('v')
+                .long("version")
+                .help("Print version")
+                .action(ArgAction::Version)
+                .global(true),
+        );
+    let root_help = crate::cli::help::root_after_help(cmd.get_styles());
     cmd = cmd.after_help(root_help);
 
     cmd = cmd.mut_subcommand("collect", |subcmd| {
-        let styles = subcmd.get_styles();
-        let header = styles.get_header();
-        let literal = styles.get_literal();
-        let help = StyledStr::from(format!(
-            "{header}Examples:{header:#}\n  {literal}rg --json PATTERN | sq collect --by-file --title-template \"review: {{{{filepath}}}}\"\n  {literal}rg --json -n -C2 PATTERN | sq collect --by-file\n\n{header}Templates:{header:#}\n  {literal}{{{{filepath}}}}{literal:#}     Full file path for the grouped result\n  {literal}{{{{filename}}}}{literal:#}     Basename of {literal}{{{{filepath}}}}{literal:#}\n  {literal}{{{{match_count}}}}{literal:#}  Number of rg match events collected for the file\n\n  Default title template: {literal}{{{{match_count}}}}:{{{{filepath}}}}{literal:#}"
-        ));
+        let help = crate::cli::commands::collect::after_help(subcmd.get_styles());
+        subcmd.after_help(help)
+    });
 
+    cmd = cmd.mut_subcommand("add", |subcmd| {
+        let help = crate::cli::commands::add::after_help(subcmd.get_styles());
+        subcmd.after_help(help)
+    });
+
+    cmd = cmd.mut_subcommand("edit", |subcmd| {
+        let help = crate::cli::commands::edit::after_help(subcmd.get_styles());
         subcmd.after_help(help)
     });
 
     cmd = cmd.mut_subcommand("list", |subcmd| {
-        let styles = subcmd.get_styles();
-        let header = styles.get_header();
-        let literal = styles.get_literal();
-        let help = StyledStr::from(format!(
-            "{header}Views:{header:#}\n  {literal}sq list --ready{literal:#}  Show only actionable work: {literal}pending{literal:#} items with no open blockers\n  {literal}sq list{literal:#}          Default view: show all non-closed items so blocked dependencies and {literal}in_progress{literal:#} work remain visible\n  {literal}sq list --all{literal:#}    Include closed items for history\n\n{header}Dependencies:{header:#}\n  Use {literal}--blocked-by <id1,id2>{literal:#} on {literal}sq add{literal:#} or {literal}sq collect{literal:#} to declare blockers.\n  Use {literal}sq edit <id> --set-blocked-by ...{literal:#} to update blockers later."
-        ));
-
+        let help = crate::cli::commands::list::after_help(subcmd.get_styles());
         subcmd.after_help(help)
+    });
+
+    cmd = cmd.mut_subcommand("rm", |subcmd| {
+        let help = crate::cli::commands::rm::after_help(subcmd.get_styles());
+        subcmd.after_help(help)
+    });
+
+    cmd = cmd.mut_subcommand("close", |subcmd| {
+        let help = crate::cli::commands::status::close_after_help(subcmd.get_styles());
+        subcmd.long_about("").after_help(help)
     });
 
     cmd
@@ -187,7 +193,7 @@ pub struct CollectArgs {
 
 #[derive(Parser)]
 pub struct ListArgs {
-    /// Filter by status (pending|in_progress|closed)
+    /// Filter by status (pending|blocked|in_progress|closed)
     #[arg(long = "status", value_name = "STATUS", display_order = 1)]
     pub status: Option<String>,
 
@@ -271,28 +277,24 @@ pub struct EditArgs {
     #[arg(long = "add-directory", value_name = "PATH", display_order = 13)]
     pub add_directory: Vec<String>,
 
-    /// Add transcript source
-    #[arg(long = "add-transcript", value_name = "PATH", display_order = 14)]
-    pub add_transcript: Vec<String>,
-
     /// Remove source by index (0-based, repeatable)
-    #[arg(long = "rm-source", value_name = "INDEX", display_order = 15)]
+    #[arg(long = "rm-source", value_name = "INDEX", display_order = 14)]
     pub rm_source: Vec<usize>,
 
     /// Set metadata as JSON (replaces full metadata object)
-    #[arg(long = "set-metadata", value_name = "JSON", display_order = 16)]
+    #[arg(long = "set-metadata", value_name = "JSON", display_order = 15)]
     pub set_metadata: Option<String>,
 
     /// Merge metadata object as JSON (deep object merge)
-    #[arg(long = "merge-metadata", value_name = "JSON", display_order = 17)]
+    #[arg(long = "merge-metadata", value_name = "JSON", display_order = 16)]
     pub merge_metadata: Option<String>,
 
     /// Set blocker IDs (comma-separated, empty to clear)
-    #[arg(long = "set-blocked-by", value_name = "IDS", display_order = 18)]
+    #[arg(long = "set-blocked-by", value_name = "IDS", display_order = 17)]
     pub set_blocked_by: Option<String>,
 
     /// Output as JSON
-    #[arg(long = "json", display_order = 19)]
+    #[arg(long = "json", display_order = 18)]
     pub json: bool,
 }
 
@@ -315,4 +317,3 @@ pub struct RmArgs {
     #[arg(long = "json")]
     pub json: bool,
 }
-

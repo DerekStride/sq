@@ -1,7 +1,24 @@
+use crate::cli::help::{HelpDoc, HelpSection};
 use crate::queue::{parse_priority_value, Queue, Source, UpdateAttrs, VALID_STATUSES};
 use crate::EditArgs;
 use anyhow::Result;
+use clap::builder::{StyledStr, Styles};
 use std::path::PathBuf;
+
+pub fn after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Metadata:")
+                .item("--set-metadata <JSON>", "Replace the full metadata object")
+                .item("--merge-metadata <JSON>", "Deep-merge a metadata patch"),
+        )
+        .section(
+            HelpSection::new("Dependencies:")
+                .text("Use --set-blocked-by <id1,id2> to replace blocker IDs.")
+                .text("Pass an empty string to clear blockers."),
+        )
+        .render(styles)
+}
 
 /// Execute the `sq edit` command.
 pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
@@ -85,6 +102,10 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     if let Some(ref json_str) = args.set_metadata {
         match serde_json::from_str::<serde_json::Value>(json_str) {
             Ok(v) => {
+                if !v.is_object() {
+                    eprintln!("Error: --set-metadata must be a JSON object");
+                    return Ok(1);
+                }
                 attrs.metadata = Some(v);
                 has_changes = true;
             }
@@ -130,8 +151,7 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     let has_source_adds = !args.add_diff.is_empty()
         || !args.add_file.is_empty()
         || !args.add_text.is_empty()
-        || !args.add_directory.is_empty()
-        || !args.add_transcript.is_empty();
+        || !args.add_directory.is_empty();
     let has_source_removes = !args.rm_source.is_empty();
 
     if has_source_adds || has_source_removes {
@@ -139,16 +159,17 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         let mut sources: Vec<serde_json::Value> =
             item.sources.iter().map(|s| s.to_json_value()).collect();
 
-        // Remove sources (sort indices in reverse to preserve correctness)
+        // Remove sources (deduplicate, then sort indices in reverse to preserve correctness)
         let mut rm_indices: Vec<usize> = args.rm_source.clone();
-        rm_indices.sort();
+        rm_indices.sort_unstable();
+        rm_indices.dedup();
+        if let Some(index) = rm_indices.iter().find(|&&index| index >= sources.len()) {
+            eprintln!("Error: Source index {} out of range", index);
+            return Ok(1);
+        }
         rm_indices.reverse();
         for index in rm_indices {
-            if index < sources.len() {
-                sources.remove(index);
-            } else {
-                eprintln!("Warning: Source index {} out of range", index);
-            }
+            sources.remove(index);
         }
 
         // Add new sources
@@ -164,11 +185,14 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
         for path in &args.add_directory {
             sources.push(source_value("directory", Some(path.as_str()), None));
         }
-        for path in &args.add_transcript {
-            sources.push(source_value("transcript", Some(path.as_str()), None));
-        }
 
-        if sources.is_empty() {
+        let retains_task_content = !sources.is_empty()
+            || args.set_title.is_some()
+            || args.set_description.is_some()
+            || item.title.is_some()
+            || item.description.is_some();
+
+        if !retains_task_content {
             eprintln!("Error: Cannot remove all sources");
             return Ok(1);
         }
@@ -189,6 +213,7 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     match queue.update(id, attrs)? {
         Some(updated) => {
             if args.json {
+                let updated = queue.item_with_computed_status(updated);
                 let json = serde_json::to_string_pretty(&updated.to_json_value())?;
                 println!("{}", json);
             } else {
