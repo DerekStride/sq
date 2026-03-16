@@ -1,9 +1,41 @@
+use crate::cli::help::{HelpDoc, HelpSection};
 use crate::collect::{detect_format, render_title, Format};
 use crate::queue::{parse_priority_value, NewItem, Queue, Source};
 use crate::CollectArgs;
 use anyhow::Result;
+use clap::builder::{StyledStr, Styles};
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
+
+pub fn after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Examples:")
+                .item(
+                    "rg --json PATTERN | sq collect --by-file --title-template \"review: {{filepath}}\"",
+                    "Group ripgrep matches by file with a custom title",
+                )
+                .item(
+                    "rg --json -n -C2 PATTERN | sq collect --by-file",
+                    "Preserve line numbers and nearby context in the collected text source",
+                ),
+        )
+        .section(
+            HelpSection::new("Templates:")
+                .item("{{filepath}}", "Full file path for the grouped result")
+                .item("{{filename}}", "Basename of {{filepath}}")
+                .item(
+                    "{{match_count}}",
+                    "Number of rg match events collected for the file",
+                )
+                .text("Default title template: {{match_count}}:{{filepath}}"),
+        )
+        .section(
+            HelpSection::new("Dependencies:")
+                .text("Use --blocked-by <id1,id2> to declare blockers for every created item."),
+        )
+        .render(styles)
+}
 
 /// Execute the `sq collect` command.
 pub fn execute(args: &CollectArgs, queue_path: PathBuf) -> Result<i32> {
