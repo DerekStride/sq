@@ -8,8 +8,11 @@ use std::io::{BufRead, BufReader, Seek, Write};
 use std::os::fd::AsFd;
 use std::path::{Path, PathBuf};
 
-/// Valid status values for queue items.
+/// Valid persisted status values for queue items.
 pub const VALID_STATUSES: &[&str] = &["pending", "in_progress", "closed"];
+
+/// Valid display status values surfaced by list/show output.
+pub const VALID_DISPLAY_STATUSES: &[&str] = &["pending", "blocked", "in_progress", "closed"];
 
 /// Valid source types accepted by `push` (used for validation on add).
 pub const VALID_SOURCE_TYPES: &[&str] = &["diff", "file", "text", "directory"];
@@ -76,6 +79,29 @@ impl Item {
 
     pub fn blocked(&self) -> bool {
         !self.blocked_by.is_empty()
+    }
+
+    pub fn computed_status(&self, open_ids: Option<&HashSet<String>>) -> String {
+        if !self.pending() || !self.blocked() {
+            return self.status.clone();
+        }
+
+        match open_ids {
+            None => "blocked".to_string(),
+            Some(ids) => {
+                if self.blocked_by.iter().any(|id| ids.contains(id)) {
+                    "blocked".to_string()
+                } else {
+                    self.status.clone()
+                }
+            }
+        }
+    }
+
+    pub fn with_computed_status(&self, open_ids: Option<&HashSet<String>>) -> Self {
+        let mut item = self.clone();
+        item.status = self.computed_status(open_ids);
+        item
     }
 
     pub fn ready(&self, open_ids: Option<&HashSet<String>>) -> bool {

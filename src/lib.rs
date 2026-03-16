@@ -185,7 +185,7 @@ pub struct CollectArgs {
 
 #[derive(Parser)]
 pub struct ListArgs {
-    /// Filter by status (pending|in_progress|closed)
+    /// Filter by status (pending|blocked|in_progress|closed)
     #[arg(long = "status", value_name = "STATUS", display_order = 1)]
     pub status: Option<String>,
 

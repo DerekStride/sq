@@ -515,6 +515,55 @@ fn test_ready_in_progress_blocker_blocks_readiness() {
 }
 
 #[test]
+fn test_computed_status_reports_blocked_when_blocker_is_open() {
+    let blocker_id = "abc".to_string();
+    let item = Item {
+        id: "def".to_string(),
+        title: None,
+        description: None,
+        status: "pending".to_string(),
+        priority: None,
+        sources: vec![Source {
+            type_: "text".to_string(),
+            path: None,
+            content: Some("blocked".to_string()),
+        }],
+        metadata: serde_json::json!({}),
+        blocked_by: vec![blocker_id.clone()],
+        errors: Vec::new(),
+        created_at: "2025-01-01T12:00:00.000Z".to_string(),
+        updated_at: "2025-01-01T12:00:00.000Z".to_string(),
+    };
+
+    let open_ids = HashSet::from([blocker_id]);
+    assert_eq!(item.computed_status(Some(&open_ids)), "blocked");
+}
+
+#[test]
+fn test_computed_status_reports_pending_when_blockers_are_closed() {
+    let item = Item {
+        id: "def".to_string(),
+        title: None,
+        description: None,
+        status: "pending".to_string(),
+        priority: None,
+        sources: vec![Source {
+            type_: "text".to_string(),
+            path: None,
+            content: Some("blocked".to_string()),
+        }],
+        metadata: serde_json::json!({}),
+        blocked_by: vec!["abc".to_string()],
+        errors: Vec::new(),
+        created_at: "2025-01-01T12:00:00.000Z".to_string(),
+        updated_at: "2025-01-01T12:00:00.000Z".to_string(),
+    };
+
+    let open_ids = HashSet::new();
+    assert_eq!(item.computed_status(Some(&open_ids)), "pending");
+}
+
+#[test]
 fn test_ready_unblocks_after_close() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);

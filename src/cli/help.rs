@@ -112,11 +112,17 @@ pub fn root_after_help(styles: &Styles) -> StyledStr {
                 .item("sq list --ready", "See the next actionable tasks")
                 .item("sq add --title <TITLE>", "Create a new task")
                 .item("sq show <id>", "Inspect one task in detail")
-                .item("sq edit <id> ...", "Update fields, sources, metadata, or blockers"),
+                .item(
+                    "sq edit <id> ...",
+                    "Update fields, sources, metadata, or blockers",
+                ),
         )
         .section(
             HelpSection::new("Command help:")
-                .item("sq <command> --help", "See command-specific guidance and examples")
+                .item(
+                    "sq <command> --help",
+                    "See command-specific guidance and examples",
+                )
                 .item("sq prime", "Output workflow context for AI agents"),
         )
         .render(styles)

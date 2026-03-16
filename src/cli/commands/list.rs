@@ -1,6 +1,6 @@
 use crate::cli::formatters;
 use crate::cli::help::{HelpDoc, HelpSection};
-use crate::queue::{parse_priority_value, Item, Queue, VALID_STATUSES};
+use crate::queue::{parse_priority_value, Item, Queue, VALID_DISPLAY_STATUSES};
 use crate::ListArgs;
 use anyhow::Result;
 use clap::builder::{StyledStr, Styles};
@@ -25,7 +25,10 @@ pub fn after_help(styles: &Styles) -> StyledStr {
         )
         .section(
             HelpSection::new("Filters:")
-                .item("--status <STATUS>", "Restrict to one lifecycle state")
+                .item(
+                    "--status <STATUS>",
+                    "Restrict to one visible state (pending|blocked|in_progress|closed)",
+                )
                 .item(
                     "--priority <PRIORITY>",
                     "Repeat to include multiple priorities",
@@ -62,29 +65,43 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     let queue = Queue::new(queue_path);
 
     if let Some(status) = args.status.as_deref() {
-        if !VALID_STATUSES.contains(&status) {
+        if !VALID_DISPLAY_STATUSES.contains(&status) {
             eprintln!(
                 "Error: Invalid status: {}. Valid: {}",
                 status,
-                VALID_STATUSES.join(", ")
+                VALID_DISPLAY_STATUSES.join(", ")
             );
             return Ok(1);
         }
     }
 
-    let mut items: Vec<Item> = if args.ready {
+    let all_items = queue.all();
+    let open_ids: HashSet<String> = all_items
+        .iter()
+        .filter(|item| item.status != "closed")
+        .map(|item| item.id.clone())
+        .collect();
+
+    let base_items: Vec<Item> = if args.ready {
         queue.ready()
-    } else if let Some(status) = args.status.as_deref() {
-        queue.filter(Some(status))
-    } else if args.all {
-        queue.filter(None)
+    } else if args.all || args.status.is_some() {
+        all_items.clone()
     } else {
-        queue
-            .all()
-            .into_iter()
+        all_items
+            .iter()
             .filter(|item| item.status != "closed")
+            .cloned()
             .collect()
     };
+
+    let mut items: Vec<Item> = base_items
+        .into_iter()
+        .map(|item| item.with_computed_status(Some(&open_ids)))
+        .collect();
+
+    if let Some(status) = args.status.as_deref() {
+        items.retain(|item| item.status == status);
+    }
 
     if !args.priority.is_empty() {
         let requested_priorities: HashSet<u8> = args
@@ -138,14 +155,8 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
     } else if items.is_empty() {
         eprintln!("No items found");
     } else {
-        let open_ids: HashSet<String> = queue
-            .all()
-            .into_iter()
-            .filter(|i| i.status != "closed")
-            .map(|i| i.id.clone())
-            .collect();
         for item in &items {
-            formatters::print_item_summary(item, Some(&open_ids));
+            formatters::print_item_summary(item);
         }
         eprintln!("{} item(s)", items.len());
     }
