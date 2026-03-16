@@ -3,7 +3,6 @@ use crate::queue::{parse_priority_value, Queue, Source, UpdateAttrs, VALID_STATU
 use crate::EditArgs;
 use anyhow::Result;
 use clap::builder::{StyledStr, Styles};
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 pub fn after_help(styles: &Styles) -> StyledStr {
@@ -214,13 +213,7 @@ pub fn execute(args: &EditArgs, queue_path: PathBuf) -> Result<i32> {
     match queue.update(id, attrs)? {
         Some(updated) => {
             if args.json {
-                let open_ids: HashSet<String> = queue
-                    .all()
-                    .into_iter()
-                    .filter(|item| item.status != "closed")
-                    .map(|item| item.id)
-                    .collect();
-                let updated = updated.with_computed_status(Some(&open_ids));
+                let updated = queue.item_with_computed_status(updated);
                 let json = serde_json::to_string_pretty(&updated.to_json_value())?;
                 println!("{}", json);
             } else {

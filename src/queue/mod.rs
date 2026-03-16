@@ -263,6 +263,46 @@ impl Queue {
         self.all().into_iter().find(|item| item.id == id)
     }
 
+    /// Return IDs for all non-closed items currently in the queue.
+    pub fn open_ids(&self) -> HashSet<String> {
+        open_ids_for_items(&self.all())
+    }
+
+    /// Apply computed/display status semantics to a single item.
+    pub fn item_with_computed_status(&self, item: Item) -> Item {
+        let open_ids = self.open_ids();
+        item.with_computed_status(Some(&open_ids))
+    }
+
+    /// Apply computed/display status semantics to a collection of items.
+    pub fn items_with_computed_status(&self, items: Vec<Item>) -> Vec<Item> {
+        let open_ids = self.open_ids();
+        items
+            .into_iter()
+            .map(|item| item.with_computed_status(Some(&open_ids)))
+            .collect()
+    }
+
+    /// Load all items and apply computed/display status semantics.
+    pub fn all_with_computed_status(&self) -> Vec<Item> {
+        let items = self.all();
+        let open_ids = open_ids_for_items(&items);
+        items
+            .into_iter()
+            .map(|item| item.with_computed_status(Some(&open_ids)))
+            .collect()
+    }
+
+    /// Find an item by ID and apply computed/display status semantics.
+    pub fn find_with_computed_status(&self, id: &str) -> Option<Item> {
+        let items = self.all();
+        let open_ids = open_ids_for_items(&items);
+        items
+            .into_iter()
+            .find(|item| item.id == id)
+            .map(|item| item.with_computed_status(Some(&open_ids)))
+    }
+
     /// Filter items by persisted lifecycle status (optional).
     ///
     /// This method intentionally does not apply computed/display status
@@ -436,6 +476,14 @@ impl Queue {
 
         f(&mut file)
     }
+}
+
+fn open_ids_for_items(items: &[Item]) -> HashSet<String> {
+    items
+        .iter()
+        .filter(|item| item.status != "closed")
+        .map(|item| item.id.clone())
+        .collect()
 }
 
 /// Read items from an open file, skipping corrupt lines.

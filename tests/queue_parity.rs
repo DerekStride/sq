@@ -564,6 +564,85 @@ fn test_computed_status_reports_pending_when_blockers_are_closed() {
 }
 
 #[test]
+fn test_find_with_computed_status_surfaces_blocked_item() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let blocker = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocker".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let blocked = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocked".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![blocker.id.clone()],
+        )
+        .unwrap();
+
+    let found = queue.find_with_computed_status(&blocked.id).unwrap();
+    assert_eq!(found.status, "blocked");
+}
+
+#[test]
+fn test_all_with_computed_status_surfaces_blocked_items() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let blocker = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocker".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let blocked = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocked".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![blocker.id.clone()],
+        )
+        .unwrap();
+
+    let items = queue.all_with_computed_status();
+    let blocked = items.iter().find(|item| item.id == blocked.id).unwrap();
+    assert_eq!(blocked.status, "blocked");
+}
+
+#[test]
 fn test_ready_unblocks_after_close() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);

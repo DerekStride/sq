@@ -3,7 +3,6 @@ use crate::queue::{Queue, UpdateAttrs};
 use crate::StatusArgs;
 use anyhow::Result;
 use clap::builder::{StyledStr, Styles};
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 pub fn close_after_help(styles: &Styles) -> StyledStr {
@@ -42,20 +41,15 @@ pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i
     };
 
     if existing.status == status {
+        let existing_id = existing.id.clone();
         if args.json {
-            let open_ids: HashSet<String> = queue
-                .all()
-                .into_iter()
-                .filter(|item| item.status != "closed")
-                .map(|item| item.id)
-                .collect();
-            let existing = existing.with_computed_status(Some(&open_ids));
+            let existing = queue.item_with_computed_status(existing);
             let json = serde_json::to_string_pretty(&existing.to_json_value())?;
             println!("{}", json);
         } else {
-            println!("{}", existing.id);
+            println!("{}", existing_id);
         }
-        eprintln!("Item {} is already {}", existing.id, status);
+        eprintln!("Item {} is already {}", existing_id, status);
         return Ok(0);
     }
 
@@ -67,13 +61,7 @@ pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i
     match queue.update(id, attrs)? {
         Some(updated) => {
             if args.json {
-                let open_ids: HashSet<String> = queue
-                    .all()
-                    .into_iter()
-                    .filter(|item| item.status != "closed")
-                    .map(|item| item.id)
-                    .collect();
-                let updated = updated.with_computed_status(Some(&open_ids));
+                let updated = queue.item_with_computed_status(updated);
                 let json = serde_json::to_string_pretty(&updated.to_json_value())?;
                 println!("{}", json);
             } else {

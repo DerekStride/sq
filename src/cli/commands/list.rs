@@ -75,29 +75,17 @@ pub fn execute(args: &ListArgs, queue_path: PathBuf) -> Result<i32> {
         }
     }
 
-    let all_items = queue.all();
-    let open_ids: HashSet<String> = all_items
-        .iter()
-        .filter(|item| item.status != "closed")
-        .map(|item| item.id.clone())
-        .collect();
-
-    let base_items: Vec<Item> = if args.ready {
-        queue.ready()
+    let mut items: Vec<Item> = if args.ready {
+        queue.items_with_computed_status(queue.ready())
     } else if args.all || args.status.is_some() {
-        all_items.clone()
+        queue.all_with_computed_status()
     } else {
-        all_items
-            .iter()
+        queue
+            .all_with_computed_status()
+            .into_iter()
             .filter(|item| item.status != "closed")
-            .cloned()
             .collect()
     };
-
-    let mut items: Vec<Item> = base_items
-        .into_iter()
-        .map(|item| item.with_computed_status(Some(&open_ids)))
-        .collect();
 
     if let Some(status) = args.status.as_deref() {
         items.retain(|item| item.status == status);

@@ -3,7 +3,6 @@ use crate::queue::{parse_priority_value, Queue, Source};
 use crate::AddArgs;
 use anyhow::Result;
 use clap::builder::{StyledStr, Styles};
-use std::collections::HashSet;
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -125,13 +124,7 @@ pub fn execute(args: &AddArgs, queue_path: PathBuf) -> Result<i32> {
     )?;
 
     if args.json {
-        let open_ids: HashSet<String> = queue
-            .all()
-            .into_iter()
-            .filter(|item| item.status != "closed")
-            .map(|item| item.id)
-            .collect();
-        let item = item.with_computed_status(Some(&open_ids));
+        let item = queue.item_with_computed_status(item);
         let json = serde_json::to_string_pretty(&item.to_json_value())?;
         println!("{}", json);
     } else {

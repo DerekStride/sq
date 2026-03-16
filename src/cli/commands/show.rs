@@ -2,7 +2,6 @@ use crate::cli::formatters;
 use crate::queue::Queue;
 use crate::ShowArgs;
 use anyhow::Result;
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 /// Execute the `sq show` command.
@@ -17,15 +16,8 @@ pub fn execute(args: &ShowArgs, queue_path: PathBuf) -> Result<i32> {
         }
     };
 
-    let all_items = queue.all();
-    let open_ids: HashSet<String> = all_items
-        .iter()
-        .filter(|item| item.status != "closed")
-        .map(|item| item.id.clone())
-        .collect();
-
-    let item = match all_items.into_iter().find(|item| item.id == id) {
-        Some(item) => item.with_computed_status(Some(&open_ids)),
+    let item = match queue.find_with_computed_status(id) {
+        Some(item) => item,
         None => {
             eprintln!("Error: Item not found: {}", id);
             return Ok(1);
