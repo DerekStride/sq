@@ -97,7 +97,11 @@ fn git_rev_parse(cwd: &Path, arg: &str) -> Option<String> {
 
 fn resolve_git_path(cwd: &Path, raw: &str) -> PathBuf {
     let path = PathBuf::from(raw);
-    let absolute = if path.is_absolute() { path } else { cwd.join(path) };
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        cwd.join(path)
+    };
     std::fs::canonicalize(&absolute).unwrap_or(absolute)
 }
 
@@ -151,7 +155,10 @@ mod tests {
             git_common_dir: root.join(".git"),
         };
 
-        assert_eq!(resolve_implicit_queue_path(&cwd, Some(&git)), ancestor_queue);
+        assert_eq!(
+            resolve_implicit_queue_path(&cwd, Some(&git)),
+            ancestor_queue
+        );
     }
 
     #[test]
