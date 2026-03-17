@@ -104,7 +104,7 @@ pub fn root_after_help(styles: &Styles) -> StyledStr {
     HelpDoc::new()
         .section(
             HelpSection::new("Task file:")
-                .text("By default, sq uses .sift/issues.jsonl.")
+                .text("By default, sq discovers the nearest existing .sift/issues.jsonl within the current git worktree and otherwise falls back to <cwd>/.sift/issues.jsonl.")
                 .text("Override with -q, --queue <PATH> or SQ_QUEUE_PATH=<PATH>."),
         )
         .section(

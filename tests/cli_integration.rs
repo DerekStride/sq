@@ -2193,7 +2193,7 @@ fn test_main_help_documents_workflow_sections() {
     assert!(stdout.contains("collect"));
     assert!(stdout.contains("close    Mark a task as closed"));
     assert_contains_in_order(&stdout, &["Task file:", "Workflow:", "Command help:"]);
-    assert!(stdout.contains("By default, sq uses .sift/issues.jsonl"));
+    assert!(stdout.contains("By default, sq discovers the nearest existing .sift/issues.jsonl within the current git worktree and otherwise falls back to <cwd>/.sift/issues.jsonl"));
     assert!(stdout.contains("sq list --ready"));
     assert!(stdout.contains("sq add --title <TITLE>"));
     assert!(stdout.contains("sq <command> --help"));
@@ -2364,7 +2364,9 @@ fn test_prime_output() {
         .stdout(predicate::str::contains(
             "Use `sq` to manage tasks in a JSONL file during agent workflows.",
         ))
-        .stdout(predicate::str::contains("Default queue path: `.sift/issues.jsonl`."))
+        .stdout(predicate::str::contains(
+            "By default, `sq` discovers the nearest existing `.sift/issues.jsonl` within the current git worktree and otherwise falls back to `<cwd>/.sift/issues.jsonl`.",
+        ))
         .stdout(predicate::str::contains("## Examples"))
         .stdout(predicate::str::contains("sq list --ready"))
         .stdout(predicate::str::contains("## Readiness and dependencies"))

@@ -16,7 +16,7 @@ pub fn generate(prelude_only: bool) -> String {
 
 Use `sq` to manage tasks in a JSONL file during agent workflows.
 
-Default queue path: `.sift/issues.jsonl`. Override it with `-q, --queue <PATH>` or `SQ_QUEUE_PATH=<PATH>`.
+By default, `sq` discovers the nearest existing `.sift/issues.jsonl` within the current git worktree and otherwise falls back to `<cwd>/.sift/issues.jsonl`. Override with `-q, --queue <PATH>` or `SQ_QUEUE_PATH=<PATH>`.
 
 ## Examples
 
