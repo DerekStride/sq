@@ -14,7 +14,10 @@
 
 Run from `sq/` unless otherwise noted.
 
+Always run `cargo fmt` before finalizing changes or committing.
+
 ```bash
+cargo fmt
 cargo test
 ```
 

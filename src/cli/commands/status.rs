@@ -1,7 +1,25 @@
+use crate::cli::help::{HelpDoc, HelpSection};
 use crate::queue::{Queue, UpdateAttrs};
 use crate::StatusArgs;
 use anyhow::Result;
+use clap::builder::{StyledStr, Styles};
 use std::path::PathBuf;
+
+pub fn close_after_help(styles: &Styles) -> StyledStr {
+    HelpDoc::new()
+        .section(
+            HelpSection::new("Behavior:")
+                .item(
+                    "sq close <id>",
+                    "Keep an item in history with status closed",
+                )
+                .item(
+                    "sq close <id> --json",
+                    "Return the updated item payload as JSON",
+                ),
+        )
+        .render(styles)
+}
 
 pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i32> {
     let queue = Queue::new(queue_path);
@@ -14,6 +32,27 @@ pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i
         }
     };
 
+    let existing = match queue.find(id) {
+        Some(item) => item,
+        None => {
+            eprintln!("Error: Item not found: {}", id);
+            return Ok(1);
+        }
+    };
+
+    if existing.status == status {
+        let existing_id = existing.id.clone();
+        if args.json {
+            let existing = queue.item_with_computed_status(existing);
+            let json = serde_json::to_string_pretty(&existing.to_json_value())?;
+            println!("{}", json);
+        } else {
+            println!("{}", existing_id);
+        }
+        eprintln!("Item {} is already {}", existing_id, status);
+        return Ok(0);
+    }
+
     let attrs = UpdateAttrs {
         status: Some(status.to_string()),
         ..Default::default()
@@ -22,12 +61,14 @@ pub fn execute(args: &StatusArgs, queue_path: PathBuf, status: &str) -> Result<i
     match queue.update(id, attrs)? {
         Some(updated) => {
             if args.json {
+                let updated = queue.item_with_computed_status(updated);
                 let json = serde_json::to_string_pretty(&updated.to_json_value())?;
                 println!("{}", json);
             } else {
                 println!("{}", updated.id);
                 eprintln!("Updated item {}", updated.id);
             }
+
             Ok(0)
         }
         None => {

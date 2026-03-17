@@ -64,7 +64,7 @@ Use `sq --help` for a full list of options.
 
 ### List views and dependencies
 
-Dependencies are modeled with `blocked_by`. An item is considered ready when it is `pending` and none of its blocker IDs refer to another open `pending` item.
+Dependencies are modeled with `blocked_by`. An item is considered ready when it is `pending` and none of its blocker IDs refer to another non-closed item.
 
 Use these views intentionally:
 

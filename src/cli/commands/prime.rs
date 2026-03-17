@@ -1,19 +1,20 @@
+use crate::PrimeArgs;
 use anyhow::Result;
 
 /// Execute the `sq prime` command.
-pub fn execute() -> Result<i32> {
-    println!("{}", generate());
+pub fn execute(args: &PrimeArgs) -> Result<i32> {
+    println!("{}", generate(args.prelude));
     Ok(0)
 }
 
 /// Generate the prime context string.
-pub fn generate() -> String {
+pub fn generate(prelude_only: bool) -> String {
     let mut parts = Vec::new();
 
     parts.push(
         r#"# sq — Lightweight task-list CLI with structured sources
 
-`sq` manages tasks in a JSONL file for agent workflows.
+Use `sq` to manage tasks in a JSONL file during agent workflows.
 
 By default, `sq` discovers the nearest existing `.sift/issues.jsonl` within the current git worktree and otherwise falls back to `<cwd>/.sift/issues.jsonl`. Override with `-q, --queue <PATH>` or `SQ_QUEUE_PATH=<PATH>`.
 
@@ -35,41 +36,49 @@ sq list --ready
 
 ## Readiness and dependencies
 
-Dependencies are modeled with `blocked_by`: an item is ready when it is `pending` and none of its blocker IDs refer to another open `pending` item.
+Use `blocked_by` to model dependencies. A task is ready when it is `pending` and none of its blocker IDs refer to another non-closed task.
 
-Use these list views intentionally:
+Use these list views:
 
 - `sq list --ready` — actionable work only (`pending` and unblocked)
 - `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work stay visible
 - `sq list --all` — include closed items for history/auditing
 
-When choosing the next task to start, prefer `sq list --ready`.
+When you need the next task, start with `sq list --ready`.
 
-Blocker management examples:
+Manage blockers like this:
 
 ```bash
-sq add --title "Implement feature" --blocked-by abc123
-sq edit xyz789 --set-blocked-by abc123,def456
-sq edit xyz789 --set-blocked-by ""
-sq show xyz789
+sq add --title "Implement feature" --blocked-by abc
+sq edit xyz --set-blocked-by abc,def
+sq edit xyz --set-blocked-by ""
+sq show xyz
 ```
 
 ## Priority
 
 Priority uses the inclusive range `0..4`, where `0` is highest.
 
-## `sq` Commands"#
+Use priority to order ready work. Do not treat it as a measure of overall importance.
+
+Combine `priority` with `blocked_by` so ready items form a practical next-work queue.
+
+User instruction overrides queue order. If the user asks for a specific task, do that task even when other tasks have higher priority.
+
+Do not treat lower-priority tasks as ignorable; they are just not the default next task."#
             .to_string(),
     );
 
-    parts.push(generate_command_reference());
+    if !prelude_only {
+        parts.push(generate_command_reference());
+    }
 
     parts.join("\n\n")
 }
 
 fn generate_command_reference() -> String {
     let cmd = crate::build_cli();
-    let mut lines = Vec::new();
+    let mut lines = vec!["## `sq` Commands".to_string(), String::new()];
 
     for sub in cmd.get_subcommands() {
         let name = sub.get_name();

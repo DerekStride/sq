@@ -72,12 +72,12 @@ fn test_source_serialization() {
 
 #[test]
 fn test_unknown_source_type_serialization() {
-    let json = r#"{"type":"transcript","path":"/session.jsonl"}"#;
+    let json = r#"{"type":"unknown","path":"/tmp/source"}"#;
     let source: Source = serde_json::from_str(json).unwrap();
-    assert_eq!(source.type_, "transcript");
+    assert_eq!(source.type_, "unknown");
     let serialized = source.to_json_value();
-    assert_eq!(serialized["type"], "transcript");
-    assert_eq!(serialized["path"], "/session.jsonl");
+    assert_eq!(serialized["type"], "unknown");
+    assert_eq!(serialized["path"], "/tmp/source");
 }
 
 #[test]
@@ -131,8 +131,9 @@ fn test_push_and_find() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("Hello".to_string()),
-                }],
+            }],
             Some("Test".to_string()),
+            None,
             None,
             serde_json::json!({}),
             vec![],
@@ -149,24 +150,44 @@ fn test_push_and_find() {
 }
 
 #[test]
-fn test_push_validates_empty_sources() {
+fn test_push_requires_some_content_when_sources_empty() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
-    let result = queue.push(vec![], None, None, serde_json::json!({}), vec![]);
+    let result = queue.push(vec![], None, None, None, serde_json::json!({}), vec![]);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
         .to_string()
-        .contains("Sources cannot be empty"));
+        .contains("Item requires at least one source, title, or description"));
 }
 
 #[test]
-fn test_push_with_description_allows_empty_sources() {
+fn test_push_with_title_allows_empty_sources() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
     let item = queue
-        .push_with_description(
+        .push(
+            vec![],
+            Some("Title".to_string()),
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    assert_eq!(item.title.as_deref(), Some("Title"));
+    assert!(item.sources.is_empty());
+}
+
+#[test]
+fn test_push_allows_description_with_empty_sources() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
             vec![],
             Some("Title".to_string()),
             Some("Description".to_string()),
@@ -182,12 +203,12 @@ fn test_push_with_description_allows_empty_sources() {
 }
 
 #[test]
-fn test_push_with_title_allows_empty_sources() {
+fn test_push_with_title_and_no_description_allows_empty_sources() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
     let item = queue
-        .push_with_description(
+        .push(
             vec![],
             Some("Title".to_string()),
             None,
@@ -207,7 +228,7 @@ fn test_push_with_metadata_only_requires_task_content() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
-    let result = queue.push_with_description(
+    let result = queue.push(
         vec![],
         None,
         None,
@@ -224,12 +245,11 @@ fn test_push_with_metadata_only_requires_task_content() {
 }
 
 #[test]
-fn test_push_with_description_requires_some_content_when_sources_empty() {
+fn test_push_requires_some_content_when_description_and_sources_are_empty() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
-    let result =
-        queue.push_with_description(vec![], None, None, None, serde_json::json!({}), vec![]);
+    let result = queue.push(vec![], None, None, None, serde_json::json!({}), vec![]);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -242,14 +262,7 @@ fn test_push_with_priority_only_requires_task_content() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
-    let result = queue.push_with_description(
-        vec![],
-        None,
-        None,
-        Some(1),
-        serde_json::json!({}),
-        vec![],
-    );
+    let result = queue.push(vec![], None, None, Some(1), serde_json::json!({}), vec![]);
 
     assert!(result.is_err());
     assert!(result
@@ -268,6 +281,7 @@ fn test_push_validates_source_type() {
             path: None,
             content: Some("test".to_string()),
         }],
+        None,
         None,
         None,
         serde_json::json!({}),
@@ -293,7 +307,8 @@ fn test_push_unique_ids() {
                     type_: "text".to_string(),
                     path: None,
                     content: Some("test".to_string()),
-                        }],
+                }],
+                None,
                 None,
                 None,
                 serde_json::json!({}),
@@ -319,7 +334,8 @@ fn test_all_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("first".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -332,7 +348,8 @@ fn test_all_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("second".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -364,7 +381,8 @@ fn test_filter_by_status() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -388,7 +406,8 @@ fn test_filter_by_status() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test2".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -417,7 +436,8 @@ fn test_ready_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocker".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -431,7 +451,8 @@ fn test_ready_items() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocked".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -445,7 +466,7 @@ fn test_ready_items() {
 }
 
 #[test]
-fn test_ready_unblocks_after_close() {
+fn test_ready_in_progress_blocker_blocks_readiness() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
 
@@ -455,7 +476,106 @@ fn test_ready_unblocks_after_close() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocker".to_string()),
-                }],
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let _blocked = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocked".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![blocker.id.clone()],
+        )
+        .unwrap();
+
+    queue
+        .update(
+            &blocker.id,
+            UpdateAttrs {
+                status: Some("in_progress".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let ready = queue.ready();
+    assert!(ready.is_empty());
+}
+
+#[test]
+fn test_computed_status_reports_blocked_when_blocker_is_open() {
+    let blocker_id = "abc".to_string();
+    let item = Item {
+        id: "def".to_string(),
+        title: None,
+        description: None,
+        status: "pending".to_string(),
+        priority: None,
+        sources: vec![Source {
+            type_: "text".to_string(),
+            path: None,
+            content: Some("blocked".to_string()),
+        }],
+        metadata: serde_json::json!({}),
+        blocked_by: vec![blocker_id.clone()],
+        errors: Vec::new(),
+        created_at: "2025-01-01T12:00:00.000Z".to_string(),
+        updated_at: "2025-01-01T12:00:00.000Z".to_string(),
+    };
+
+    let open_ids = HashSet::from([blocker_id]);
+    assert_eq!(item.computed_status(Some(&open_ids)), "blocked");
+}
+
+#[test]
+fn test_computed_status_reports_pending_when_blockers_are_closed() {
+    let item = Item {
+        id: "def".to_string(),
+        title: None,
+        description: None,
+        status: "pending".to_string(),
+        priority: None,
+        sources: vec![Source {
+            type_: "text".to_string(),
+            path: None,
+            content: Some("blocked".to_string()),
+        }],
+        metadata: serde_json::json!({}),
+        blocked_by: vec!["abc".to_string()],
+        errors: Vec::new(),
+        created_at: "2025-01-01T12:00:00.000Z".to_string(),
+        updated_at: "2025-01-01T12:00:00.000Z".to_string(),
+    };
+
+    let open_ids = HashSet::new();
+    assert_eq!(item.computed_status(Some(&open_ids)), "pending");
+}
+
+#[test]
+fn test_find_with_computed_status_surfaces_blocked_item() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let blocker = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocker".to_string()),
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -469,7 +589,87 @@ fn test_ready_unblocks_after_close() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("blocked".to_string()),
-                }],
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![blocker.id.clone()],
+        )
+        .unwrap();
+
+    let found = queue.find_with_computed_status(&blocked.id).unwrap();
+    assert_eq!(found.status, "blocked");
+}
+
+#[test]
+fn test_all_with_computed_status_surfaces_blocked_items() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let blocker = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocker".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let blocked = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocked".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![blocker.id.clone()],
+        )
+        .unwrap();
+
+    let items = queue.all_with_computed_status();
+    let blocked = items.iter().find(|item| item.id == blocked.id).unwrap();
+    assert_eq!(blocked.status, "blocked");
+}
+
+#[test]
+fn test_ready_unblocks_after_close() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let blocker = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocker".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let blocked = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("blocked".to_string()),
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -504,7 +704,8 @@ fn test_update_item() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -541,7 +742,7 @@ fn test_update_can_clear_priority() {
     let queue = test_queue(&dir);
 
     let item = queue
-        .push_with_description(
+        .push(
             vec![],
             Some("Test".to_string()),
             None,
@@ -566,6 +767,43 @@ fn test_update_can_clear_priority() {
 }
 
 #[test]
+fn test_update_noop_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![],
+            Some("Test".to_string()),
+            Some("Description".to_string()),
+            Some(1),
+            serde_json::json!({"kind":"task"}),
+            vec!["abc".to_string()],
+        )
+        .unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    let updated = queue
+        .update(
+            &item.id,
+            UpdateAttrs {
+                status: Some(item.status.clone()),
+                title: item.title.clone(),
+                description: item.description.clone(),
+                priority: Some(item.priority),
+                metadata: Some(item.metadata.clone()),
+                blocked_by: Some(item.blocked_by.clone()),
+                sources: Some(item.sources.clone()),
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(updated.updated_at, item.updated_at);
+}
+
+#[test]
 fn test_update_invalid_status() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
@@ -576,7 +814,8 @@ fn test_update_invalid_status() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -592,6 +831,80 @@ fn test_update_invalid_status() {
         },
     );
     assert!(result.is_err());
+}
+
+#[test]
+fn test_update_invalid_source_type() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let result = queue.update(
+        &item.id,
+        UpdateAttrs {
+            sources: Some(vec![Source {
+                type_: "bogus".to_string(),
+                path: None,
+                content: Some("updated".to_string()),
+            }]),
+            ..Default::default()
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid source type"));
+}
+
+#[test]
+fn test_update_rejects_self_blocked_item() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    let result = queue.update(
+        &item.id,
+        UpdateAttrs {
+            blocked_by: Some(vec![item.id.clone()]),
+            ..Default::default()
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("cannot block itself"));
 }
 
 #[test]
@@ -622,7 +935,8 @@ fn test_remove_item() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -696,7 +1010,8 @@ fn test_timestamp_format() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({}),
@@ -766,7 +1081,8 @@ fn test_id_format() {
                     type_: "text".to_string(),
                     path: None,
                     content: Some("test".to_string()),
-                        }],
+                }],
+                None,
                 None,
                 None,
                 serde_json::json!({}),
@@ -795,7 +1111,8 @@ fn test_metadata_preserved() {
                 type_: "text".to_string(),
                 path: None,
                 content: Some("test".to_string()),
-                }],
+            }],
+            None,
             None,
             None,
             serde_json::json!({"nested": {"key": "value"}, "array": [1, 2, 3]}),
@@ -823,4 +1140,11 @@ fn test_fixture_items_parse() {
     assert_eq!(items[0].id, "abc");
     assert_eq!(items[1].id, "x1y");
     assert_eq!(items[2].id, "z99");
+
+    let full_item = &items[1];
+    assert_eq!(full_item.priority, Some(1));
+    assert_eq!(
+        full_item.metadata,
+        serde_json::json!({"workflow":"analyze"})
+    );
 }

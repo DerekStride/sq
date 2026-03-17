@@ -8,8 +8,11 @@ use std::io::{BufRead, BufReader, Seek, Write};
 use std::os::fd::AsFd;
 use std::path::{Path, PathBuf};
 
-/// Valid status values for queue items.
+/// Valid persisted status values for queue items.
 pub const VALID_STATUSES: &[&str] = &["pending", "in_progress", "closed"];
+
+/// Valid display status values surfaced by list/show output.
+pub const VALID_DISPLAY_STATUSES: &[&str] = &["pending", "blocked", "in_progress", "closed"];
 
 /// Valid source types accepted by `push` (used for validation on add).
 pub const VALID_SOURCE_TYPES: &[&str] = &["diff", "file", "text", "directory"];
@@ -61,6 +64,11 @@ fn is_empty_json_vec(v: &[serde_json::Value]) -> bool {
 
 /// Serialize items through serde so the struct definition is the source of
 /// truth for JSON output.
+///
+/// Note: this serializes the item's current `status` field verbatim. Callers
+/// that want display/view semantics (for example, surfacing `blocked` as a
+/// computed status in read-oriented output) must first call
+/// `with_computed_status(...)`.
 impl Item {
     pub fn to_json_value(&self) -> serde_json::Value {
         serde_json::to_value(self).expect("item serialization should succeed")
@@ -78,14 +86,42 @@ impl Item {
         !self.blocked_by.is_empty()
     }
 
-    pub fn ready(&self, pending_ids: Option<&HashSet<String>>) -> bool {
+    /// Compute the visible status for read-oriented views.
+    ///
+    /// Persisted lifecycle status remains `pending|in_progress|closed`, but
+    /// pending items with open blockers are surfaced as `blocked` in display
+    /// output.
+    pub fn computed_status(&self, open_ids: Option<&HashSet<String>>) -> String {
+        if !self.pending() || !self.blocked() {
+            return self.status.clone();
+        }
+
+        match open_ids {
+            None => "blocked".to_string(),
+            Some(ids) => {
+                if self.blocked_by.iter().any(|id| ids.contains(id)) {
+                    "blocked".to_string()
+                } else {
+                    self.status.clone()
+                }
+            }
+        }
+    }
+
+    pub fn with_computed_status(&self, open_ids: Option<&HashSet<String>>) -> Self {
+        let mut item = self.clone();
+        item.status = self.computed_status(open_ids);
+        item
+    }
+
+    pub fn ready(&self, open_ids: Option<&HashSet<String>>) -> bool {
         if !self.pending() {
             return false;
         }
         if !self.blocked() {
             return true;
         }
-        match pending_ids {
+        match open_ids {
             None => true,
             Some(ids) => self.blocked_by.iter().all(|id| !ids.contains(id)),
         }
@@ -146,19 +182,6 @@ impl Queue {
 
     /// Add a new item to the queue. Returns the created Item.
     pub fn push(
-        &self,
-        sources: Vec<Source>,
-        title: Option<String>,
-        priority: Option<u8>,
-        metadata: serde_json::Value,
-        blocked_by: Vec<String>,
-    ) -> Result<Item> {
-        self.validate_sources(&sources)?;
-        self.push_with_description(sources, title, None, priority, metadata, blocked_by)
-    }
-
-    /// Add a new item to the queue with description support.
-    pub fn push_with_description(
         &self,
         sources: Vec<Source>,
         title: Option<String>,
@@ -240,7 +263,52 @@ impl Queue {
         self.all().into_iter().find(|item| item.id == id)
     }
 
-    /// Filter items by status (optional).
+    /// Return IDs for all non-closed items currently in the queue.
+    pub fn open_ids(&self) -> HashSet<String> {
+        open_ids_for_items(&self.all())
+    }
+
+    /// Apply computed/display status semantics to a single item.
+    pub fn item_with_computed_status(&self, item: Item) -> Item {
+        let open_ids = self.open_ids();
+        item.with_computed_status(Some(&open_ids))
+    }
+
+    /// Apply computed/display status semantics to a collection of items.
+    pub fn items_with_computed_status(&self, items: Vec<Item>) -> Vec<Item> {
+        let open_ids = self.open_ids();
+        items
+            .into_iter()
+            .map(|item| item.with_computed_status(Some(&open_ids)))
+            .collect()
+    }
+
+    /// Load all items and apply computed/display status semantics.
+    pub fn all_with_computed_status(&self) -> Vec<Item> {
+        let items = self.all();
+        let open_ids = open_ids_for_items(&items);
+        items
+            .into_iter()
+            .map(|item| item.with_computed_status(Some(&open_ids)))
+            .collect()
+    }
+
+    /// Find an item by ID and apply computed/display status semantics.
+    pub fn find_with_computed_status(&self, id: &str) -> Option<Item> {
+        let items = self.all();
+        let open_ids = open_ids_for_items(&items);
+        items
+            .into_iter()
+            .find(|item| item.id == id)
+            .map(|item| item.with_computed_status(Some(&open_ids)))
+    }
+
+    /// Filter items by persisted lifecycle status (optional).
+    ///
+    /// This method intentionally does not apply computed/display status
+    /// semantics. Callers that want view-oriented filtering (for example,
+    /// treating `blocked` as a visible status in list/show output) should load
+    /// items, call `with_computed_status(...)`, and then filter those results.
     pub fn filter(&self, status: Option<&str>) -> Vec<Item> {
         let items = self.all();
         match status {
@@ -249,17 +317,17 @@ impl Queue {
         }
     }
 
-    /// Return pending items that are not blocked by any pending item.
+    /// Return pending items that are not blocked by any non-closed item.
     pub fn ready(&self) -> Vec<Item> {
         let items = self.all();
-        let pending_ids: HashSet<String> = items
+        let open_ids: HashSet<String> = items
             .iter()
-            .filter(|i| i.pending())
+            .filter(|i| i.status != "closed")
             .map(|i| i.id.clone())
             .collect();
         items
             .into_iter()
-            .filter(|item| item.ready(Some(&pending_ids)))
+            .filter(|item| item.ready(Some(&open_ids)))
             .collect()
     }
 
@@ -273,6 +341,7 @@ impl Queue {
                 None => return Ok(None),
             };
 
+            let original = items[index].clone();
             let item = &mut items[index];
 
             if let Some(status) = &attrs.status {
@@ -301,10 +370,16 @@ impl Queue {
                 item.metadata = metadata;
             }
             if let Some(blocked_by) = attrs.blocked_by {
+                validate_blocked_by(id, &blocked_by)?;
                 item.blocked_by = blocked_by;
             }
             if let Some(sources) = attrs.sources {
+                self.validate_source_types(&sources)?;
                 item.sources = sources;
+            }
+
+            if *item == original {
+                return Ok(Some(original));
             }
 
             item.updated_at = now_iso8601();
@@ -332,13 +407,6 @@ impl Queue {
     }
 
     // ── Private helpers ─────────────────────────────────────────────────
-
-    fn validate_sources(&self, sources: &[Source]) -> Result<()> {
-        if sources.is_empty() {
-            anyhow::bail!("Sources cannot be empty");
-        }
-        self.validate_source_types(sources)
-    }
 
     fn validate_new_item(&self, item: &NewItem) -> Result<()> {
         if let Some(priority) = item.priority {
@@ -410,6 +478,14 @@ impl Queue {
     }
 }
 
+fn open_ids_for_items(items: &[Item]) -> HashSet<String> {
+    items
+        .iter()
+        .filter(|item| item.status != "closed")
+        .map(|item| item.id.clone())
+        .collect()
+}
+
 /// Read items from an open file, skipping corrupt lines.
 fn read_items(file: &mut File, path: &Path) -> Vec<Item> {
     file.seek(std::io::SeekFrom::Start(0)).ok();
@@ -478,6 +554,13 @@ fn validate_priority(priority: u8) -> Result<()> {
     } else {
         anyhow::bail!("Invalid priority: {}. Valid: 0-4", priority);
     }
+}
+
+fn validate_blocked_by(item_id: &str, blocked_by: &[String]) -> Result<()> {
+    if blocked_by.iter().any(|blocker_id| blocker_id == item_id) {
+        anyhow::bail!("Item cannot block itself: {}", item_id);
+    }
+    Ok(())
 }
 
 /// Attributes for updating an item.

@@ -165,6 +165,37 @@ fn test_add_json() {
 }
 
 #[test]
+fn test_add_json_surfaces_blocked_status() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["status"], "blocked");
+    assert_eq!(json["blocked_by"], serde_json::json!([blocker_id]));
+}
+
+#[test]
 fn test_add_multiple_sources() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -293,6 +324,18 @@ fn test_add_invalid_metadata_fails() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid JSON for metadata"));
+}
+
+#[test]
+fn test_add_non_object_metadata_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "x", "--metadata", "[1,2,3]"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--metadata must be a JSON object"));
 }
 
 // ── List Command ────────────────────────────────────────────────────────────
@@ -543,6 +586,212 @@ fn test_list_status_filter() {
 }
 
 #[test]
+fn test_list_filters_by_repeatable_status_flag() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--title", "pending"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "in progress"])
+        .output()
+        .unwrap();
+    let in_progress_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--title", "closed"])
+        .output()
+        .unwrap();
+    let closed_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &in_progress_id, "--set-status", "in_progress"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &closed_id, "--set-status", "closed"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "list",
+            "--status",
+            "pending",
+            "--status",
+            "in_progress",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+
+    let statuses_by_title: std::collections::HashMap<String, String> = items
+        .iter()
+        .map(|item| {
+            (
+                item["title"].as_str().unwrap().to_string(),
+                item["status"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+
+    assert_eq!(statuses_by_title.get("pending").map(String::as_str), Some("pending"));
+    assert_eq!(
+        statuses_by_title
+            .get("in progress")
+            .map(String::as_str),
+        Some("in_progress")
+    );
+}
+
+#[test]
+fn test_list_invalid_status_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    sq_cmd()
+        .args(["-q", &qp, "add", "--text", "item1"])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args(["-q", &qp, "list", "--status", "bogus_status"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Invalid status: bogus_status. Valid: pending, blocked, in_progress, closed",
+        ));
+}
+
+#[test]
+fn test_list_json_surfaces_blocked_status() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let blocked_id = serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    let blocked = items.iter().find(|item| item["id"] == blocked_id).unwrap();
+
+    assert_eq!(blocked["status"], "blocked");
+}
+
+#[test]
+fn test_list_status_blocked_filter() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let blocked_id = serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--status", "blocked", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], blocked_id);
+    assert_eq!(items[0]["status"], "blocked");
+}
+
+#[test]
+fn test_list_status_pending_excludes_blocked_items() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--status", "pending", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], blocker_id);
+    assert_eq!(items[0]["status"], "pending");
+}
+
+#[test]
 fn test_list_ready() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -576,6 +825,50 @@ fn test_list_ready() {
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json.as_array().unwrap().len(), 1);
     assert_eq!(json[0]["id"], blocker_id);
+}
+
+#[test]
+fn test_list_ready_treats_in_progress_blockers_as_blocking() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+        ])
+        .assert()
+        .success();
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &blocker_id,
+            "--set-status",
+            "in_progress",
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "list", "--ready", "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(json.as_array().unwrap().is_empty());
 }
 
 // ── Show Command ────────────────────────────────────────────────────────────
@@ -615,6 +908,77 @@ fn test_show_json() {
 }
 
 #[test]
+fn test_show_json_surfaces_blocked_status() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let blocked_id = serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &blocked_id, "--json"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["status"], "blocked");
+}
+
+#[test]
+fn test_show_human_readable_surfaces_blocked_status() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            "blocked",
+            "--blocked-by",
+            &blocker_id,
+        ])
+        .output()
+        .unwrap();
+    let blocked_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "show", &blocked_id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Status: blocked"));
+}
+
+#[test]
 fn test_show_human_readable() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -651,15 +1015,7 @@ fn test_show_human_readable_with_priority() {
     let qp = queue_path(&dir);
 
     let output = sq_cmd()
-        .args([
-            "-q",
-            &qp,
-            "add",
-            "--title",
-            "My Item",
-            "--priority",
-            "2",
-        ])
+        .args(["-q", &qp, "add", "--title", "My Item", "--priority", "2"])
         .output()
         .unwrap();
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
@@ -762,6 +1118,69 @@ fn test_edit_set_and_clear_priority() {
 }
 
 #[test]
+fn test_edit_noop_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--title",
+            "test",
+            "--description",
+            "desc",
+            "--priority",
+            "1",
+            "--metadata",
+            r#"{"kind":"task"}"#,
+            "--blocked-by",
+            "abc",
+            "--text",
+            "content",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let before: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let id = before["id"].as_str().unwrap().to_string();
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--set-status",
+            "pending",
+            "--set-title",
+            "test",
+            "--set-description",
+            "desc",
+            "--set-priority",
+            "1",
+            "--set-metadata",
+            r#"{"kind":"task"}"#,
+            "--set-blocked-by",
+            "abc",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let after: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(after["updated_at"], before["updated_at"]);
+}
+
+#[test]
 fn test_edit_invalid_priority_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -861,6 +1280,43 @@ fn test_edit_json() {
 }
 
 #[test]
+fn test_edit_json_surfaces_blocked_status() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--set-blocked-by",
+            &blocker_id,
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["id"], id);
+    assert_eq!(json["status"], "blocked");
+    assert_eq!(json["blocked_by"], serde_json::json!([blocker_id]));
+}
+
+#[test]
 fn test_edit_merge_metadata_deep_merge() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -941,6 +1397,26 @@ fn test_edit_merge_metadata_array_replace_and_null() {
 
     assert_eq!(json["metadata"]["labels"], serde_json::json!(["urgent"]));
     assert!(json["metadata"]["pi_tasks"]["due"].is_null());
+}
+
+#[test]
+fn test_edit_set_metadata_invalid_non_object_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-metadata", "[]"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--set-metadata must be a JSON object",
+        ));
 }
 
 #[test]
@@ -1038,6 +1514,71 @@ fn test_edit_add_and_rm_source() {
 }
 
 #[test]
+fn test_edit_deduplicates_duplicate_rm_source_indices() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q", &qp, "add", "--text", "a", "--text", "b", "--text", "c",
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "edit",
+            &id,
+            "--rm-source",
+            "0",
+            "--rm-source",
+            "0",
+        ])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let sources = json["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 2);
+    assert_eq!(sources[0]["content"], "b");
+    assert_eq!(sources[1]["content"], "c");
+}
+
+#[test]
+fn test_edit_rm_source_out_of_range_fails() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "only source"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--rm-source", "99"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Source index 99 out of range"));
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let sources = json["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0]["content"], "only source");
+}
+
+#[test]
 fn test_edit_cannot_remove_all_sources() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -1053,6 +1594,39 @@ fn test_edit_cannot_remove_all_sources() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("Cannot remove all sources"));
+}
+
+#[test]
+fn test_edit_can_remove_last_source_when_title_remains() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--title",
+            "keep me",
+            "--text",
+            "only source",
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--rm-source", "0"])
+        .assert()
+        .success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["title"], "keep me");
+    assert!(json["sources"].as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -1095,6 +1669,24 @@ fn test_edit_set_blocked_by() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["blocked_by"], serde_json::json!(["abc", "def"]));
+}
+
+#[test]
+fn test_edit_rejects_self_blocked_item() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd()
+        .args(["-q", &qp, "edit", &id, "--set-blocked-by", &id])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot block itself"));
 }
 
 #[test]
@@ -1166,6 +1758,101 @@ fn test_close_command_json() {
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["id"], id);
     assert_eq!(json["status"], "closed");
+}
+
+#[test]
+fn test_close_command_already_closed_is_explicit_and_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd().args(["-q", &qp, "close", &id]).assert().success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let before: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let output = sq_cmd().args(["-q", &qp, "close", &id]).output().unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), id);
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains(&format!("Item {} is already closed", id)));
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let after: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(after["status"], "closed");
+    assert_eq!(after["updated_at"], before["updated_at"]);
+}
+
+#[test]
+fn test_close_command_json_already_closed_is_explicit_and_preserves_updated_at() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "test"])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    sq_cmd().args(["-q", &qp, "close", &id]).assert().success();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let before: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "close", &id, "--json"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["id"], id);
+    assert_eq!(json["status"], "closed");
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains(&format!("Item {} is already closed", id)));
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "show", &id, "--json"])
+        .output()
+        .unwrap();
+    let after: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(after["updated_at"], before["updated_at"]);
+}
+
+#[test]
+fn test_close_help_documents_behavior_only() {
+    let output = sq_cmd().args(["close", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(stdout.contains("Usage: sq close [OPTIONS] [ID]"));
+    assert!(stdout.contains("Behavior:"));
+    assert!(stdout.contains("sq close <id>"));
+    assert!(stdout.contains("Keep an item in history with status closed"));
+    assert!(stdout.contains("sq close <id> --json"));
+    assert!(stdout.contains("Return the updated item payload as JSON"));
+    assert!(!stdout.contains("Idempotence:"));
+    assert!(!stdout.contains("Examples:"));
+    assert!(!stdout.starts_with("Mark a task as closed\n\n"));
 }
 
 #[test]
@@ -1243,6 +1930,24 @@ fn test_rm_not_found() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("Item not found: zzz"));
+}
+
+#[test]
+fn test_rm_help_documents_behavior_and_safety() {
+    let output = sq_cmd().args(["rm", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(&stdout, &["Behavior:", "Safety:", "Examples:"]);
+
+    assert!(stdout.contains("sq rm <id>"));
+    assert!(stdout.contains("Remove an item from the task file entirely"));
+    assert!(stdout.contains("sq rm <id> --json"));
+    assert!(stdout.contains("Return the removed item payload as JSON"));
+    assert!(stdout.contains("Prefer sq close when you want to preserve history"));
+    assert!(stdout.contains("Use sq rm when an item was created by mistake"));
+    assert!(stdout.contains("sq rm abc"));
+    assert!(stdout.contains("Delete an item and emit the removed record for downstream tooling"));
 }
 
 // ── Collect Command ─────────────────────────────────────────────────────────
@@ -1362,6 +2067,43 @@ fn test_collect_by_file_with_description_priority_metadata_and_blocked_by() {
 }
 
 #[test]
+fn test_collect_by_file_json_surfaces_blocked_status() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    let output = sq_cmd()
+        .args(["-q", &qp, "add", "--text", "blocker"])
+        .output()
+        .unwrap();
+    let blocker_id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "collect",
+            "--by-file",
+            "--description",
+            "Migrate",
+            "--blocked-by",
+            &blocker_id,
+            "--json",
+        ])
+        .write_stdin(rg_json_input())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let items = json.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert!(items.iter().all(|item| item["status"] == "blocked"));
+    assert!(items
+        .iter()
+        .all(|item| item["blocked_by"] == serde_json::json!([blocker_id.clone()])));
+}
+
+#[test]
 fn test_collect_by_file_empty_stdin_fails() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);
@@ -1442,38 +2184,41 @@ fn test_collect_unsupported_input_fails_atomically() {
 }
 
 #[test]
-fn test_collect_appears_in_main_help() {
-    sq_cmd()
-        .args(["--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "lightweight task-list CLI with structured sources",
-        ))
-        .stdout(predicate::str::contains("collect"))
-        .stdout(predicate::str::contains("Path to task file"))
-        .stdout(predicate::str::contains(".sift/issues.jsonl"))
-        .stdout(predicate::str::contains("Manage Sift's review queue").not());
+fn test_main_help_documents_workflow_sections() {
+    let output = sq_cmd().args(["--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert!(stdout.contains("lightweight task-list CLI with structured sources"));
+    assert!(stdout.contains("collect"));
+    assert!(stdout.contains("close    Mark a task as closed"));
+    assert_contains_in_order(&stdout, &["Task file:", "Workflow:", "Command help:"]);
+    assert!(stdout.contains("By default, sq discovers the nearest existing .sift/issues.jsonl within the current git worktree and otherwise falls back to <cwd>/.sift/issues.jsonl"));
+    assert!(stdout.contains("sq list --ready"));
+    assert!(stdout.contains("sq add --title <TITLE>"));
+    assert!(stdout.contains("sq <command> --help"));
+    assert!(stdout.contains("sq prime"));
+    assert!(!stdout.contains("Manage Sift's review queue"));
 }
 
 #[test]
-fn test_collect_examples_and_templates_appear_in_collect_help() {
-    sq_cmd()
-        .args(["collect", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Examples:"))
-        .stdout(predicate::str::contains("Templates:"))
-        .stdout(predicate::str::contains(
-            "rg --json PATTERN | sq collect --by-file",
-        ))
-        .stdout(predicate::str::contains("{{filepath}}"))
-        .stdout(predicate::str::contains("{{filename}}"))
-        .stdout(predicate::str::contains("{{match_count}}"))
-        .stdout(predicate::str::contains(
-            "Default title template: {{match_count}}:{{filepath}}",
-        ))
-        .stdout(predicate::str::contains("Collect tasks from stdin"));
+fn test_collect_help_documents_examples_templates_and_dependencies() {
+    let output = sq_cmd().args(["collect", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(&stdout, &["Examples:", "Templates:", "Dependencies:"]);
+    assert!(stdout.contains("rg --json PATTERN | sq collect --by-file"));
+    assert!(stdout.contains("Group ripgrep matches by file with a custom title"));
+    assert!(stdout.contains("rg --json -n -C2 PATTERN | sq collect --by-file"));
+    assert!(stdout.contains("{{filepath}}"));
+    assert!(stdout.contains("{{filename}}"));
+    assert!(stdout.contains("{{match_count}}"));
+    assert!(stdout.contains("Default title template: {{match_count}}:{{filepath}}"));
+    assert!(
+        stdout.contains("Use --blocked-by <id1,id2> to declare blockers for every created item")
+    );
+    assert!(stdout.contains("Collect tasks from stdin"));
 }
 
 #[test]
@@ -1493,6 +2238,19 @@ fn test_add_help_puts_title_and_description_first() {
             "--text <STRING>",
         ],
     );
+}
+
+#[test]
+fn test_add_help_documents_task_content_only() {
+    let output = sq_cmd().args(["add", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(&stdout, &["Task content:", "Dependencies:"]);
+    assert!(stdout.contains("Provide at least one of --title, --description, or a source"));
+    assert!(stdout.contains("Use --blocked-by <id1,id2> to declare blockers when creating an item"));
+    assert!(!stdout.contains("Sources:"));
+    assert!(!stdout.contains("Examples:"));
 }
 
 #[test]
@@ -1533,6 +2291,21 @@ fn test_edit_help_puts_title_and_description_first() {
 }
 
 #[test]
+fn test_edit_help_documents_metadata_and_dependencies() {
+    let output = sq_cmd().args(["edit", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(&stdout, &["Metadata:", "Dependencies:"]);
+    assert!(stdout.contains("Replace the full metadata object"));
+    assert!(stdout.contains("Deep-merge a metadata patch"));
+    assert!(stdout.contains("Use --set-blocked-by <id1,id2> to replace blocker IDs"));
+    assert!(stdout.contains("Pass an empty string to clear blockers"));
+    assert!(!stdout.contains("Fields:"));
+    assert!(!stdout.contains("Sources:"));
+}
+
+#[test]
 fn test_list_help_includes_priority_filter_near_other_filters() {
     let output = sq_cmd().args(["list", "--help"]).output().unwrap();
     assert!(output.status.success());
@@ -1551,22 +2324,30 @@ fn test_list_help_includes_priority_filter_near_other_filters() {
 }
 
 #[test]
-fn test_list_help_documents_views_and_dependencies() {
-    sq_cmd()
-        .args(["list", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Views:"))
-        .stdout(predicate::str::contains("sq list --ready"))
-        .stdout(predicate::str::contains(
-            "Show only actionable work: pending items with no open blockers",
-        ))
-        .stdout(predicate::str::contains(
-            "Default view: show all non-closed items so blocked dependencies and in_progress work remain visible",
-        ))
-        .stdout(predicate::str::contains("Dependencies:"))
-        .stdout(predicate::str::contains("--blocked-by <id1,id2>"))
-        .stdout(predicate::str::contains("sq edit <id> --set-blocked-by ..."));
+fn test_list_help_documents_footer_sections() {
+    let output = sq_cmd().args(["list", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_contains_in_order(
+        &stdout,
+        &["Views:", "Filters:", "Dependencies:", "Examples:"],
+    );
+
+    assert!(stdout.contains("sq list --ready"));
+    assert!(stdout.contains("Show only actionable work: pending items with no open blockers"));
+    assert!(stdout.contains(
+        "Default view: show all non-closed items so blocked dependencies and in_progress work remain visible",
+    ));
+    assert!(stdout.contains(
+        "Restrict to visible states; repeat to include multiple (pending|blocked|in_progress|closed)",
+    ));
+    assert!(stdout.contains("Repeat to include multiple priorities"));
+    assert!(stdout.contains("Apply a jq select expression after built-in filtering"));
+    assert!(stdout.contains("--blocked-by <id1,id2>"));
+    assert!(stdout.contains("sq edit <id> --set-blocked-by ..."));
+    assert!(stdout.contains("sq list --priority 0 --priority 1"));
+    assert!(stdout.contains("sq list --status in_progress --json"));
 }
 
 // ── Prime Command ───────────────────────────────────────────────────────────
@@ -1581,23 +2362,45 @@ fn test_prime_output() {
             "# sq — Lightweight task-list CLI with structured sources",
         ))
         .stdout(predicate::str::contains(
-            "`sq` manages tasks in a JSONL file for agent workflows.",
+            "Use `sq` to manage tasks in a JSONL file during agent workflows.",
         ))
-        .stdout(predicate::str::contains(".sift/issues.jsonl"))
+        .stdout(predicate::str::contains(
+            "By default, `sq` discovers the nearest existing `.sift/issues.jsonl` within the current git worktree and otherwise falls back to `<cwd>/.sift/issues.jsonl`.",
+        ))
         .stdout(predicate::str::contains("## Examples"))
         .stdout(predicate::str::contains("sq list --ready"))
         .stdout(predicate::str::contains("## Readiness and dependencies"))
-        .stdout(predicate::str::contains("Dependencies are modeled with `blocked_by`"))
+        .stdout(predicate::str::contains(
+            "Use `blocked_by` to model dependencies.",
+        ))
         .stdout(predicate::str::contains(
             "- `sq list` — default view; shows all non-closed items so blocked dependencies and `in_progress` work stay visible",
         ))
         .stdout(predicate::str::contains(
-            "When choosing the next task to start, prefer `sq list --ready`.",
+            "When you need the next task, start with `sq list --ready`.",
         ))
-        .stdout(predicate::str::contains("sq edit xyz789 --set-blocked-by abc123,def456"))
+        .stdout(predicate::str::contains("sq add --title \"Implement feature\" --blocked-by abc"))
+        .stdout(predicate::str::contains("sq edit xyz --set-blocked-by abc,def"))
+        .stdout(predicate::str::contains("sq edit xyz --set-blocked-by \"\""))
+        .stdout(predicate::str::contains("sq show xyz"))
         .stdout(predicate::str::contains("## Priority"))
         .stdout(predicate::str::contains(
             "Priority uses the inclusive range `0..4`, where `0` is highest.",
+        ))
+        .stdout(predicate::str::contains(
+            "Use priority to order ready work. Do not treat it as a measure of overall importance.",
+        ))
+        .stdout(predicate::str::contains(
+            "Combine `priority` with `blocked_by` so ready items form a practical next-work queue.",
+        ))
+        .stdout(predicate::str::contains(
+            "User instruction overrides queue order.",
+        ))
+        .stdout(predicate::str::contains(
+            "If the user asks for a specific task, do that task even when other tasks have higher priority.",
+        ))
+        .stdout(predicate::str::contains(
+            "Do not treat lower-priority tasks as ignorable; they are just not the default next task.",
         ))
         .stdout(predicate::str::contains("## `sq` Commands"))
         .stdout(predicate::str::contains("### `sq add` — Add a new task"))
@@ -1618,12 +2421,30 @@ fn test_prime_output() {
 }
 
 #[test]
-fn test_prime_help_has_no_full_flag() {
+fn test_prime_prelude_skips_command_reference() {
+    sq_cmd()
+        .args(["prime", "--prelude"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("## Priority"))
+        .stdout(predicate::str::contains("## `sq` Commands").not())
+        .stdout(predicate::str::contains("### `sq add` — Add a new task").not())
+        .stdout(predicate::str::contains("### `sq collect` — Collect tasks from stdin").not());
+}
+
+#[test]
+fn test_prime_help_has_prelude_flag_and_no_full_flag() {
     sq_cmd()
         .args(["prime", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Output task workflow context for AI agents"))
+        .stdout(predicate::str::contains(
+            "Output task workflow context for AI agents",
+        ))
+        .stdout(predicate::str::contains("--prelude"))
+        .stdout(predicate::str::contains(
+            "Output only the prelude and skip the command reference",
+        ))
         .stdout(predicate::str::contains("--full").not())
         .stdout(predicate::str::contains("Force full CLI output").not());
 }
@@ -1636,7 +2457,7 @@ fn test_version_flag() {
         .args(["--version"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("sq 0.5.0"));
+        .stdout(predicate::str::contains("sq 0.6.0"));
 }
 
 #[test]
@@ -1645,7 +2466,7 @@ fn test_version_short_flag() {
         .args(["-v"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("sq 0.5.0"));
+        .stdout(predicate::str::contains("sq 0.6.0"));
 }
 
 // ── Queue Path Resolution ───────────────────────────────────────────────────
