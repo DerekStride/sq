@@ -2,6 +2,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
+use ulid::Ulid;
 
 fn sq_cmd() -> Command {
     assert_cmd::cargo::cargo_bin_cmd!("sq")
@@ -47,7 +48,8 @@ fn test_add_text_source() {
 
     assert!(output.status.success());
     let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
-    assert_eq!(id.len(), 3);
+    assert_eq!(id.len(), 26);
+    assert!(Ulid::from_string(&id).is_ok());
 
     // Verify it's in the queue
     let content = fs::read_to_string(dir.path().join("queue.jsonl")).unwrap();
@@ -161,7 +163,9 @@ fn test_add_json() {
     assert_eq!(json["title"], "My Item");
     assert_eq!(json["description"], "Describe it");
     assert_eq!(json["status"], "pending");
-    assert!(json["id"].as_str().unwrap().len() == 3);
+    let id = json["id"].as_str().unwrap();
+    assert_eq!(id.len(), 26);
+    assert!(Ulid::from_string(id).is_ok());
 }
 
 #[test]

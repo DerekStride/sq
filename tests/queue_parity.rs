@@ -1,6 +1,7 @@
 use sift_queue::queue::{parse_priority_value, Item, Queue, Source, UpdateAttrs};
 use std::collections::HashSet;
 use tempfile::TempDir;
+use ulid::Ulid;
 
 fn test_queue(dir: &TempDir) -> Queue {
     let path = dir.path().join("queue.jsonl");
@@ -140,7 +141,8 @@ fn test_push_and_find() {
         )
         .unwrap();
 
-    assert_eq!(item.id.len(), 3);
+    assert_eq!(item.id.len(), 26);
+    assert!(Ulid::from_string(&item.id).is_ok());
     assert_eq!(item.status, "pending");
     assert_eq!(item.title.as_deref(), Some("Test"));
 
@@ -1089,11 +1091,12 @@ fn test_id_format() {
                 vec![],
             )
             .unwrap();
-        assert_eq!(item.id.len(), 3);
+        assert_eq!(item.id.len(), 26);
+        assert!(Ulid::from_string(&item.id).is_ok());
         assert!(
             item.id
                 .chars()
-                .all(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                .all(|c: char| c.is_ascii_uppercase() || c.is_ascii_digit()),
             "ID contains invalid chars: {}",
             item.id
         );

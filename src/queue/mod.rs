@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use rand::Rng;
 use rustix::fs::{flock, FlockOperation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -7,6 +6,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Seek, Write};
 use std::os::fd::AsFd;
 use std::path::{Path, PathBuf};
+use ulid::Ulid;
 
 /// Valid persisted status values for queue items.
 pub const VALID_STATUSES: &[&str] = &["pending", "in_progress", "closed"];
@@ -214,18 +214,13 @@ impl Queue {
         }
 
         self.with_exclusive_lock(|f| {
-            let existing = read_items(f, &self.path);
-            let mut existing_ids: HashSet<String> = existing.iter().map(|i| i.id.clone()).collect();
             let now = now_iso8601();
             let mut created = Vec::with_capacity(items.len());
 
             f.seek(std::io::SeekFrom::End(0))?;
             for new_item in items {
-                let id = generate_id(&existing_ids);
-                existing_ids.insert(id.clone());
-
                 let item = Item {
-                    id,
+                    id: generate_id(),
                     title: new_item.title,
                     description: new_item.description,
                     status: "pending".to_string(),
@@ -527,18 +522,9 @@ fn rewrite_items(file: &mut File, items: &[Item]) -> Result<()> {
     Ok(())
 }
 
-/// Generate a 3-char alphanumeric ID that doesn't collide with existing.
-fn generate_id(existing_ids: &HashSet<String>) -> String {
-    let chars: Vec<char> = ('a'..='z').chain('0'..='9').collect();
-    let mut rng = rand::thread_rng();
-    loop {
-        let id: String = (0..3)
-            .map(|_| chars[rng.gen_range(0..chars.len())])
-            .collect();
-        if !existing_ids.contains(&id) {
-            return id;
-        }
-    }
+/// Generate a canonical uppercase ULID.
+fn generate_id() -> String {
+    Ulid::new().to_string()
 }
 
 /// Current UTC time in ISO 8601 with millisecond precision.
