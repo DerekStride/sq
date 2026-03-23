@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use rand::Rng;
 use rustix::fs::{flock, FlockOperation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -19,6 +18,14 @@ pub const VALID_SOURCE_TYPES: &[&str] = &["diff", "file", "text", "directory"];
 
 /// Valid priority range accepted by first-class priority fields.
 pub const VALID_PRIORITY_RANGE: std::ops::RangeInclusive<u8> = 0..=4;
+
+const ID_ALPHABET: [char; 32] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j',
+    'k', 'm', 'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'x', 'y', 'z',
+];
+const MIN_GENERATED_ID_LENGTH: usize = 3;
+// 10% is intentional for now; reduce this if collision retries become too frequent in production.
+const ID_SPACE_OCCUPANCY_THRESHOLD_PERCENT: usize = 10;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -527,18 +534,38 @@ fn rewrite_items(file: &mut File, items: &[Item]) -> Result<()> {
     Ok(())
 }
 
-/// Generate a 3-char alphanumeric ID that doesn't collide with existing.
+/// Generate a random lowercase ID using adaptive length and retry on collision.
 fn generate_id(existing_ids: &HashSet<String>) -> String {
-    let chars: Vec<char> = ('a'..='z').chain('0'..='9').collect();
-    let mut rng = rand::thread_rng();
+    let length = generated_id_length(existing_ids.len());
+
     loop {
-        let id: String = (0..3)
-            .map(|_| chars[rng.gen_range(0..chars.len())])
-            .collect();
+        let id = nanoid::nanoid!(length, &ID_ALPHABET);
         if !existing_ids.contains(&id) {
             return id;
         }
     }
+}
+
+fn generated_id_length(active_or_reserved_ids: usize) -> usize {
+    let mut length = MIN_GENERATED_ID_LENGTH;
+
+    loop {
+        let total_space = id_space_for_length(length);
+        let occupancy_threshold = total_space * ID_SPACE_OCCUPANCY_THRESHOLD_PERCENT / 100;
+
+        if active_or_reserved_ids < occupancy_threshold {
+            return length;
+        }
+
+        length += 1;
+    }
+}
+
+fn id_space_for_length(length: usize) -> usize {
+    ID_ALPHABET
+        .len()
+        .checked_pow(length as u32)
+        .expect("generated ID space should fit in usize")
 }
 
 /// Current UTC time in ISO 8601 with millisecond precision.
@@ -573,4 +600,31 @@ pub struct UpdateAttrs {
     pub metadata: Option<serde_json::Value>,
     pub blocked_by: Option<Vec<String>>,
     pub sources: Option<Vec<Source>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{generated_id_length, id_space_for_length};
+
+    #[test]
+    fn id_space_matches_base32_lengths() {
+        assert_eq!(id_space_for_length(3), 32_768);
+        assert_eq!(id_space_for_length(4), 1_048_576);
+        assert_eq!(id_space_for_length(5), 33_554_432);
+        assert_eq!(id_space_for_length(6), 1_073_741_824);
+    }
+
+    #[test]
+    fn generated_ids_start_at_three_characters() {
+        assert_eq!(generated_id_length(0), 3);
+        assert_eq!(generated_id_length(3_275), 3);
+    }
+
+    #[test]
+    fn generated_id_length_grows_at_documented_thresholds() {
+        assert_eq!(generated_id_length(3_276), 4);
+        assert_eq!(generated_id_length(104_857), 5);
+        assert_eq!(generated_id_length(3_355_443), 6);
+        assert_eq!(generated_id_length(107_374_182), 7);
+    }
 }
