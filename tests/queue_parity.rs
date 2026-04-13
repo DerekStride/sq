@@ -1,10 +1,36 @@
 use sift_queue::queue::{parse_priority_value, Item, Queue, Source, UpdateAttrs};
 use std::collections::HashSet;
+use std::fs;
 use tempfile::TempDir;
 
 fn test_queue(dir: &TempDir) -> Queue {
     let path = dir.path().join("queue.jsonl");
     Queue::new(path)
+}
+
+fn seed_queue_with_item_count(queue: &Queue, count: usize) {
+    let mut lines = Vec::with_capacity(count);
+
+    for i in 0..count {
+        lines.push(
+            serde_json::json!({
+                "id": format!("seed{i:06}"),
+                "status": "pending",
+                "sources": [{"type": "text", "content": "seed"}],
+                "metadata": {},
+                "created_at": "2025-01-01T12:00:00.000Z",
+                "updated_at": "2025-01-01T12:00:00.000Z"
+            })
+            .to_string(),
+        );
+    }
+
+    let mut content = lines.join("\n");
+    if !content.is_empty() {
+        content.push('\n');
+    }
+
+    fs::write(&queue.path, content).unwrap();
 }
 
 // ── JSONL Parsing + Serialization Tests ─────────────────────────────────────
@@ -1073,8 +1099,9 @@ impl RegexLite {
 fn test_id_format() {
     let dir = TempDir::new().unwrap();
     let queue = test_queue(&dir);
+    let alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
-    for _ in 0..10 {
+    for _ in 0..100 {
         let item = queue
             .push(
                 vec![Source {
@@ -1091,13 +1118,59 @@ fn test_id_format() {
             .unwrap();
         assert_eq!(item.id.len(), 3);
         assert!(
-            item.id
-                .chars()
-                .all(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            item.id.chars().all(|c| alphabet.contains(c)),
             "ID contains invalid chars: {}",
             item.id
         );
     }
+}
+
+#[test]
+fn test_id_length_stays_at_three_below_threshold() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+    seed_queue_with_item_count(&queue, 3_275);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    assert_eq!(item.id.len(), 3);
+}
+
+#[test]
+fn test_id_length_grows_once_three_char_space_reaches_threshold() {
+    let dir = TempDir::new().unwrap();
+    let queue = test_queue(&dir);
+    seed_queue_with_item_count(&queue, 3_276);
+
+    let item = queue
+        .push(
+            vec![Source {
+                type_: "text".to_string(),
+                path: None,
+                content: Some("test".to_string()),
+            }],
+            None,
+            None,
+            None,
+            serde_json::json!({}),
+            vec![],
+        )
+        .unwrap();
+
+    assert_eq!(item.id.len(), 4);
 }
 
 #[test]

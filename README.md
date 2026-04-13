@@ -20,6 +20,14 @@ brew install derekstride/tap/sift-queue
 cargo install sift-queue
 ```
 
+### Manual installation
+
+Using a package manager above is recommended so you can easily get updates, but if that is for some reason problematic you can also manually install as follows:
+
+1. Download the [latest version](https://github.com/DerekStride/sq/releases/latest) for your architecture.
+2. Copy the single `sq` file into your preferred directory (e.g. `~/.bin`)
+3. Make sure that directory is in your `$PATH`
+
 ## Install `sq` agent skills
 
 You can install this repo as a plugin source to get the `sq` skills.
