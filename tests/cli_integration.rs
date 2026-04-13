@@ -2505,7 +2505,7 @@ fn test_version_flag() {
         .args(["--version"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("sq 0.7.0"));
+        .stdout(predicate::str::contains("sq 0.8.0"));
 }
 
 #[test]
@@ -2514,7 +2514,7 @@ fn test_version_short_flag() {
         .args(["-v"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("sq 0.7.0"));
+        .stdout(predicate::str::contains("sq 0.8.0"));
 }
 
 // ── Queue Path Resolution ───────────────────────────────────────────────────
