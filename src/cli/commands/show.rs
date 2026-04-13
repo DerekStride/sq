@@ -28,7 +28,7 @@ pub fn execute(args: &ShowArgs, queue_path: PathBuf) -> Result<i32> {
         let json = serde_json::to_string_pretty(&item.to_json_value())?;
         println!("{}", json);
     } else {
-        formatters::print_item_detail(&item);
+        formatters::print_item_detail(&item, args.full);
     }
 
     Ok(0)

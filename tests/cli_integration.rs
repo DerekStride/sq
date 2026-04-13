@@ -1036,6 +1036,46 @@ fn test_show_human_readable_with_priority() {
 }
 
 #[test]
+fn test_show_full_flag() {
+    let dir = TempDir::new().unwrap();
+    let qp = queue_path(&dir);
+
+    // Create content with more than 3 lines so truncation kicks in
+    let long_content = "line1\nline2\nline3\nline4\nline5";
+    let output = sq_cmd()
+        .args([
+            "-q",
+            &qp,
+            "add",
+            "--text",
+            long_content,
+            "--title",
+            "Full Test",
+        ])
+        .output()
+        .unwrap();
+    let id = String::from_utf8(output.stdout).unwrap().trim().to_string();
+
+    // Without --full, output should be truncated (shows "...")
+    sq_cmd()
+        .args(["-q", &qp, "show", &id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("..."))
+        .stdout(predicate::str::contains("line3"))
+        .stdout(predicate::str::contains("line5").not());
+
+    // With --full, all lines should be visible
+    sq_cmd()
+        .args(["-q", &qp, "show", &id, "--full"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("line4"))
+        .stdout(predicate::str::contains("line5"))
+        .stdout(predicate::str::contains("...").not());
+}
+
+#[test]
 fn test_show_not_found() {
     let dir = TempDir::new().unwrap();
     let qp = queue_path(&dir);

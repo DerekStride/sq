@@ -42,7 +42,7 @@ pub fn print_item_summary(item: &Item) {
 }
 
 /// Print detailed view for an item (used by `sq show`).
-pub fn print_item_detail(item: &Item) {
+pub fn print_item_detail(item: &Item, full: bool) {
     println!("Item: {}", item.id);
     if let Some(ref title) = item.title {
         println!("Title: {}", title);
@@ -72,12 +72,12 @@ pub fn print_item_detail(item: &Item) {
 
     println!("Sources: ({})", item.sources.len());
     for (i, source) in item.sources.iter().enumerate() {
-        print_source(source, i);
+        print_source(source, i, full);
     }
 }
 
 /// Print a single source entry.
-fn print_source(source: &crate::queue::Source, index: usize) {
+fn print_source(source: &crate::queue::Source, index: usize, full: bool) {
     let location = if let Some(ref path) = source.path {
         path.clone()
     } else if source.content.is_some() {
@@ -90,11 +90,16 @@ fn print_source(source: &crate::queue::Source, index: usize) {
 
     if let (Some(ref content), None) = (&source.content, &source.path) {
         let lines: Vec<&str> = content.lines().collect();
-        let preview: Vec<&str> = lines.iter().take(3).copied().collect();
-        let preview_str = preview.join("\n      ");
-        println!("      {}", preview_str);
-        if lines.len() > 3 {
-            println!("      ...");
+        if full {
+            let all = lines.join("\n      ");
+            println!("      {}", all);
+        } else {
+            let preview: Vec<&str> = lines.iter().take(3).copied().collect();
+            let preview_str = preview.join("\n      ");
+            println!("      {}", preview_str);
+            if lines.len() > 3 {
+                println!("      ...");
+            }
         }
     }
 }

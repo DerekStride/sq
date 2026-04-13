@@ -234,6 +234,10 @@ pub struct ShowArgs {
     /// Output as JSON
     #[arg(long = "json")]
     pub json: bool,
+
+    /// Show full source content without truncation
+    #[arg(long = "full")]
+    pub full: bool,
 }
 
 #[derive(Parser)]
